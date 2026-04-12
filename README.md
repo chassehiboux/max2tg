@@ -25,6 +25,7 @@
 - Разное оформление для личных и групповых чатов
 - Ответ из Telegram обратно в Max (опционально, через inline-кнопку)
 - Уведомления о статусе соединения с Max — при запуске, потере связи и восстановлении (с троттлингом, чтобы не спамить)
+- Поддержка SOCKS5-прокси для подключения к Telegram
 - Работает как userbot — подключается к вашему аккаунту Max через WebSocket
 - Docker-ready: разворачивается одной командой
 
@@ -75,6 +76,7 @@ cp .env.example .env
 | `DEBUG`         | нет          | `true` — подробные логи + дамп JSON в `debug/` |
 | `REPLY_ENABLED` | нет          | `true` — разрешить ответы из Telegram в Max    |
 | `LOG_DIR`       | нет          | Путь к директории логов (по умолчанию `logs`)  |
+| `TG_PROXY`      | нет          | SOCKS5-прокси для Telegram (`socks5://host:port`) |
 
 ## Запуск
 
@@ -193,9 +195,9 @@ sudo journalctl -u max2tg -f
 ## Как это работает
 
 ```
-Max (WebSocket) ──→ max2tg ──→ Telegram Bot ──→ Ваш чат
-                       ↑                            │
-                       └── (если REPLY_ENABLED) ────┘
+Max (WebSocket) ──→ max2tg ──→ [SOCKS5 proxy] ──→ Telegram Bot ──→ Ваш чат
+                       ↑                                              │
+                       └────────── (если REPLY_ENABLED) ──────────────┘
 ```
 
 1. Приложение подключается к Max через WebSocket как ваш аккаунт
@@ -268,6 +270,7 @@ Real-time message forwarding from **Max** messenger (max.ru) to **Telegram** —
 - Different formatting for DMs and group chats
 - Reply from Telegram back to Max (optional, via inline button)
 - Connection status notifications — on startup, disconnect, and reconnect (throttled to avoid spam)
+- SOCKS5 proxy support for connecting to Telegram
 - Works as a userbot — connects to your Max account via WebSocket
 - Docker-ready: deploy with a single command
 
@@ -318,6 +321,7 @@ cp .env.example .env
 | `DEBUG` | no | `true` — verbose logs + JSON dumps to `debug/` |
 | `REPLY_ENABLED` | no | `true` — enable replies from Telegram to Max |
 | `LOG_DIR` | no | Log directory path (default: `logs`) |
+| `TG_PROXY` | no | SOCKS5 proxy for Telegram (`socks5://host:port`) |
 
 ## Running
 
@@ -436,9 +440,9 @@ sudo journalctl -u max2tg -f
 ## How It Works
 
 ```
-Max (WebSocket) ──→ max2tg ──→ Telegram Bot ──→ Your chat
-                       ↑                            │
-                       └── (if REPLY_ENABLED) ──────┘
+Max (WebSocket) ──→ max2tg ──→ [SOCKS5 proxy] ──→ Telegram Bot ──→ Your chat
+                       ↑                                              │
+                       └────────── (if REPLY_ENABLED) ────────────────┘
 ```
 
 1. The app connects to Max via WebSocket using your account credentials

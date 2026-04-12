@@ -101,9 +101,13 @@ async def _on_text_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("⚠️ Ошибка при отправке в Max.")
 
 
-def build_tg_app(token: str, max_client: MaxClient, allowed_chat_id: str) -> Application:
+def build_tg_app(token: str, max_client: MaxClient, allowed_chat_id: str,
+                  proxy_url: str | None = None) -> Application:
     """Build and configure the Telegram Application with handlers."""
-    app = Application.builder().token(token).build()
+    builder = Application.builder().token(token)
+    if proxy_url:
+        builder = builder.proxy(proxy_url).get_updates_proxy(proxy_url)
+    app = builder.build()
     app.bot_data["max_client"] = max_client
     app.bot_data[_ALLOWED_CHAT_ID_KEY] = int(allowed_chat_id)
 
