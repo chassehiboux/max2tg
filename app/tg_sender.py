@@ -5,6 +5,7 @@ import logging
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.constants import ParseMode
 from telegram.error import RetryAfter, TimedOut
+from telegram.request import HTTPXRequest
 
 log = logging.getLogger(__name__)
 
@@ -21,8 +22,12 @@ def reply_keyboard(max_chat_id) -> InlineKeyboardMarkup:
 
 
 class TelegramSender:
-    def __init__(self, token: str, chat_id: str):
-        self._bot = Bot(token=token)
+    def __init__(self, token: str, chat_id: str, proxy_url: str | None = None):
+        if proxy_url:
+            request = HTTPXRequest(proxy=proxy_url)
+            self._bot = Bot(token=token, request=request)
+        else:
+            self._bot = Bot(token=token)
         self._chat_id = chat_id
 
     @property

@@ -11,6 +11,7 @@ class Settings:
     tg_bot_token: str
     tg_chat_id: str
     max_chat_ids: str | None = None
+    tg_proxy: str | None = None
     debug: bool = False
     reply_enabled: bool = False
 
@@ -40,6 +41,7 @@ def load_settings() -> Settings:
         tg_bot_token=os.environ["TG_BOT_TOKEN"],
         tg_chat_id=os.environ["TG_CHAT_ID"],
         max_chat_ids=os.environ.get("MAX_CHAT_IDS") or None,
+        tg_proxy=os.environ.get("TG_PROXY") or None,
         debug=os.environ.get("DEBUG", "").lower() in ("1", "true", "yes"),
         reply_enabled=os.environ.get("REPLY_ENABLED", "").lower() in ("1", "true", "yes"),
     )
