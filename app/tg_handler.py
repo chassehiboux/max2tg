@@ -1,3 +1,4 @@
+import html
 import logging
 
 from telegram import Update
@@ -52,7 +53,7 @@ async def _on_reply_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     context.user_data[PENDING_REPLY_LABEL_KEY] = label
 
     await query.message.reply_text(
-        f"✏️ Напишите ответ для <b>{label}</b> (ответом на оригинальное сообщение):\n"
+        f"✏️ Напишите ответ для <b>{html.escape(label)}</b> (ответом на оригинальное сообщение):\n"
         "<i>(или /cancel для отмены)</i>",
         parse_mode="HTML",
     )
@@ -93,7 +94,8 @@ async def _on_text_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     try:
         resp = await max_client.send_message(max_chat_id, text, elements)
         if resp:
-            await update.message.reply_text(f"✅ Отправлено → <b>{label or max_chat_id}</b>", parse_mode="HTML")
+            safe_target = html.escape(str(label or max_chat_id))
+            await update.message.reply_text(f"✅ Отправлено → <b>{safe_target}</b>", parse_mode="HTML")
         else:
             await update.message.reply_text("⚠️ Не удалось отправить сообщение в Max.")
     except Exception:

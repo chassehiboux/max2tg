@@ -301,3 +301,21 @@ class TestOnTextReply:
 
         args = update.message.reply_text.call_args[0][0]
         assert "⚠️" in args
+
+
+    @pytest.mark.asyncio
+    async def test_escapes_html_in_success_label(self):
+        max_client = MagicMock()
+        max_client.send_message = AsyncMock(return_value={"ok": True})
+
+        update = _make_message_update("Hi", chat_type="private")
+        ctx = _make_context(
+            user_data={PENDING_REPLY_KEY: 1, PENDING_REPLY_LABEL_KEY: "<b>evil</b>"},
+            bot_data={"max_client": max_client},
+        )
+
+        await _on_text_reply(update, ctx)
+
+        args = update.message.reply_text.call_args[0][0]
+        assert '<b>evil</b>' not in args
+        assert '&lt;b&gt;evil&lt;/b&gt;' in args

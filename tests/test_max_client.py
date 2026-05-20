@@ -275,3 +275,24 @@ class TestMaxClientInit:
 
         result = c.on_disconnect(my_handler)
         assert result is my_handler
+
+
+    def test_chat_ids_are_not_shared_between_instances(self):
+        c1 = MaxClient(token="tok", device_id="dev", chat_ids="1,2")
+        c2 = MaxClient(token="tok", device_id="dev")
+        assert c1.chat_ids == [1, 2]
+        assert c2.chat_ids == []
+
+
+class TestMaskSensitive:
+    def test_masks_token_field_in_json(self):
+        text = '{"token":"secret-value","x":1}'
+        masked = MaxClient._mask_sensitive(text)
+        assert 'secret-value' not in masked
+        assert '***' in masked
+
+    def test_masks_max_token_env_like_string(self):
+        text = 'MAX_TOKEN=my-secret-token DEBUG=true'
+        masked = MaxClient._mask_sensitive(text)
+        assert 'my-secret-token' not in masked
+        assert 'MAX_TOKEN=***' in masked

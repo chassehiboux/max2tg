@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import random
+import re
 import time
 from dataclasses import dataclass, field
 from enum import IntEnum
@@ -86,7 +87,6 @@ class MaxClient:
     WS_URL = "wss://ws-api.oneme.ru/websocket"
     HEARTBEAT_SEC = 30
     RECONNECT_SEC = 5
-    chat_ids = []
 
     def __init__(self, token: str, device_id: str, chat_ids: str | None = None, debug: bool = False):
         self.token = token
@@ -102,8 +102,9 @@ class MaxClient:
         self._dispatch_counter = 0
         self._pending: dict[int, asyncio.Future] = {}
         self._on_disconnect_cb = None
+        self.chat_ids: list[int] = []
         if chat_ids:
-            self.chat_ids += map(int, map(str.strip, chat_ids.split(',')))
+            self.chat_ids.extend(map(int, map(str.strip, chat_ids.split(','))))
 
     # ── decorator API ──────────────────────────────────────────────
 
@@ -134,7 +135,7 @@ class MaxClient:
         }
         self._seq += 1
         raw = json.dumps(pkt, ensure_ascii=False)
-        log.debug(">>> SEND op=%d seq=%d | %s", opcode, seq, raw[:800])
+        log.debug(">>> SEND op=%d seq=%d | %s", opcode, seq, self._mask_sensitive(raw[:800]))
         await self._ws.send_str(raw)
         return seq
 
@@ -250,7 +251,7 @@ class MaxClient:
             fut = self._pending.pop(seq)
             if not fut.done():
                 fut.set_result({})
-            log.warning("<<< ERROR op=%-4s seq=%s | %s", op, seq, payload)
+            log.warning("<<< ERROR op=%-4s seq=%s | %s", op, seq, self._mask_sensitive(str(payload)))
 
         # server-initiated events — not a reply to one of our requests
         else:
@@ -295,7 +296,7 @@ class MaxClient:
                 log.debug("Heartbeat op=%s", op)
 
             elif cmd not in (1, 3):
-                log.info("<<< EVENT op=%-4s cmd=%-3s | %s", op, cmd, payload_preview[:500])
+                log.info("<<< EVENT op=%-4s cmd=%-3s | %s", op, cmd, self._mask_sensitive(payload_preview[:500]))
 
     # ── WebSocket RPC: fetch contacts ──────────────────────────────
 
@@ -348,6 +349,14 @@ class MaxClient:
             if close_after:
                 await session.close()
         return None
+
+
+    @staticmethod
+    def _mask_sensitive(text: str) -> str:
+        """Best-effort masking for secrets in logs."""
+        masked = re.sub(r'("token"\s*:\s*")[^"]+(")', r'\1***\2', text, flags=re.IGNORECASE)
+        masked = re.sub(r'(MAX_TOKEN=)[^\s]+', r'\1***', masked, flags=re.IGNORECASE)
+        return masked
 
     # ── message parsing ────────────────────────────────────────────
 
