@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -13,6 +14,7 @@ log = logging.getLogger(__name__)
 
 class ContactResolver:
     CONTACT_BATCH_SIZE = 20
+    CONTACT_PREFETCH_TIMEOUT_SEC = 10
 
     def __init__(self, client: MaxClient | None = None):
         self.chats: dict[Any, str] = {}
@@ -45,14 +47,33 @@ class ContactResolver:
         return str(user_id)
 
     async def resolve_users_batch(self, user_ids: list) -> None:
-        """Pre-fetch unknown users via WS in bounded chunks to avoid RPC timeouts."""
+        """Pre-fetch unknown users via WS chunks with a bounded total latency budget."""
         unknown = [uid for uid in user_ids if uid not in self.users and uid not in self._fetch_failed]
         if not unknown:
             return
 
-        for i in range(0, len(unknown), self.CONTACT_BATCH_SIZE):
-            chunk = unknown[i:i + self.CONTACT_BATCH_SIZE]
-            await self._ws_fetch_contacts(chunk)
+        chunks = [unknown[i:i + self.CONTACT_BATCH_SIZE] for i in range(0, len(unknown), self.CONTACT_BATCH_SIZE)]
+        tasks = [asyncio.create_task(self._ws_fetch_contacts(chunk)) for chunk in chunks]
+        try:
+            done, pending = await asyncio.wait(tasks, timeout=self.CONTACT_PREFETCH_TIMEOUT_SEC)
+            for task in done:
+                if task.cancelled():
+                    continue
+                exc = task.exception()
+                if exc is not None:
+                    log.exception("Contact prefetch chunk failed", exc_info=exc)
+            if pending:
+                log.warning(
+                    "Contact prefetch timed out after %.1fs: completed %d/%d chunks",
+                    self.CONTACT_PREFETCH_TIMEOUT_SEC,
+                    len(done),
+                    len(tasks),
+                )
+                for task in pending:
+                    task.cancel()
+                await asyncio.gather(*pending, return_exceptions=True)
+        finally:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     # ── populate from AUTH_SNAPSHOT ────────────────────────────────
 
