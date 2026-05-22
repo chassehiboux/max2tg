@@ -71,6 +71,7 @@ cp .env.example .env
 | `MAX_TOKEN`     | да           | Токен авторизации Max                          |
 | `MAX_DEVICE_ID` | да           | ID устройства Max                              |
 | `MAX_CHAT_IDS`  | нет          | список ID чатов Max, разделенных запятой       |
+| `MAX_EXCLUDE_CHAT_IDS` | нет    | список ID чатов Max, которые нужно исключить   |
 | `TG_BOT_TOKEN`  | да           | Токен Telegram-бота                            |
 | `TG_CHAT_ID`    | да           | ID чата, куда пересылать сообщения             |
 | `DEBUG`         | нет          | `true` — подробные логи + дамп JSON в `debug/` |

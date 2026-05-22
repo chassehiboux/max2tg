@@ -51,6 +51,7 @@ class TestSettingsDataclass:
         assert s.debug is False
         assert s.reply_enabled is False
         assert s.max_chat_ids is None
+        assert s.max_exclude_chat_ids is None
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +129,18 @@ class TestLoadSettingsValid:
     def test_max_chat_ids_none_when_empty_string(self):
         s = _load_settings_with_env(_env(MAX_CHAT_IDS=""))
         assert s.max_chat_ids is None
+
+    def test_max_exclude_chat_ids_none_when_not_set(self):
+        s = _load_settings_with_env(_env())
+        assert s.max_exclude_chat_ids is None
+
+    def test_max_exclude_chat_ids_populated_when_set(self):
+        s = _load_settings_with_env(_env(MAX_EXCLUDE_CHAT_IDS="-123,-456"))
+        assert s.max_exclude_chat_ids == "-123,-456"
+
+    def test_max_exclude_chat_ids_none_when_empty_string(self):
+        s = _load_settings_with_env(_env(MAX_EXCLUDE_CHAT_IDS=""))
+        assert s.max_exclude_chat_ids is None
 
 
 # ---------------------------------------------------------------------------

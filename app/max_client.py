@@ -88,7 +88,14 @@ class MaxClient:
     HEARTBEAT_SEC = 30
     RECONNECT_SEC = 5
 
-    def __init__(self, token: str, device_id: str, chat_ids: str | None = None, debug: bool = False):
+    def __init__(
+        self,
+        token: str,
+        device_id: str,
+        chat_ids: str | None = None,
+        exclude_chat_ids: str | None = None,
+        debug: bool = False,
+    ):
         self.token = token
         self.device_id = device_id
         self.debug = debug
@@ -103,8 +110,11 @@ class MaxClient:
         self._pending: dict[int, asyncio.Future] = {}
         self._on_disconnect_cb = None
         self.chat_ids: list[int] = []
+        self.exclude_chat_ids: list[int] = []
         if chat_ids:
             self.chat_ids.extend(map(int, map(str.strip, chat_ids.split(','))))
+        if exclude_chat_ids:
+            self.exclude_chat_ids.extend(map(int, map(str.strip, exclude_chat_ids.split(','))))
 
     # ── decorator API ──────────────────────────────────────────────
 
@@ -288,7 +298,7 @@ class MaxClient:
 
                 if self._on_message_cb:
                     msg = self._parse_message(payload)
-                    if msg is not None and ((not self.chat_ids) or (msg.chat_id in self.chat_ids)):
+                    if msg is not None and (((not self.chat_ids) or (msg.chat_id in self.chat_ids)) and (msg.chat_id not in self.exclude_chat_ids)):
                         task = asyncio.create_task(self._on_message_cb(msg))
                         task.add_done_callback(_log_task_exception)
 

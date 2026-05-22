@@ -75,6 +75,7 @@ async def main():
 
     client = create_max_client(
         settings.max_token, settings.max_device_id, sender, settings.max_chat_ids,
+        settings.max_exclude_chat_ids,
         debug=settings.debug, reply_enabled=settings.reply_enabled,
     )
 

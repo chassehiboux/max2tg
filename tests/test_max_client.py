@@ -277,6 +277,16 @@ class TestMaxClientInit:
         assert result is my_handler
 
 
+    def test_exclude_chat_ids_parsed(self):
+        c = MaxClient(token="tok", device_id="dev", exclude_chat_ids="3,4")
+        assert c.exclude_chat_ids == [3, 4]
+
+    def test_exclude_chat_ids_are_not_shared_between_instances(self):
+        c1 = MaxClient(token="tok", device_id="dev", exclude_chat_ids="3,4")
+        c2 = MaxClient(token="tok", device_id="dev")
+        assert c1.exclude_chat_ids == [3, 4]
+        assert c2.exclude_chat_ids == []
+
     def test_chat_ids_are_not_shared_between_instances(self):
         c1 = MaxClient(token="tok", device_id="dev", chat_ids="1,2")
         c2 = MaxClient(token="tok", device_id="dev")
