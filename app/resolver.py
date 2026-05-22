@@ -12,6 +12,8 @@ log = logging.getLogger(__name__)
 
 
 class ContactResolver:
+    CONTACT_BATCH_SIZE = 20
+
     def __init__(self, client: MaxClient | None = None):
         self.chats: dict[Any, str] = {}
         self.chat_types: dict[Any, str] = {}
@@ -43,10 +45,14 @@ class ContactResolver:
         return str(user_id)
 
     async def resolve_users_batch(self, user_ids: list) -> None:
-        """Pre-fetch a batch of unknown user IDs in one WS call."""
+        """Pre-fetch unknown users via WS in bounded chunks to avoid RPC timeouts."""
         unknown = [uid for uid in user_ids if uid not in self.users and uid not in self._fetch_failed]
-        if unknown:
-            await self._ws_fetch_contacts(unknown)
+        if not unknown:
+            return
+
+        for i in range(0, len(unknown), self.CONTACT_BATCH_SIZE):
+            chunk = unknown[i:i + self.CONTACT_BATCH_SIZE]
+            await self._ws_fetch_contacts(chunk)
 
     # ── populate from AUTH_SNAPSHOT ────────────────────────────────
 
