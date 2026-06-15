@@ -4,7 +4,7 @@ import os
 import pytest
 from unittest.mock import patch, MagicMock
 
-from app.config import Settings, load_settings
+from app.config import Settings, _extract_max_token, load_settings
 
 
 def _load_settings_with_env(env: dict) -> Settings:
@@ -141,6 +141,17 @@ class TestLoadSettingsValid:
     def test_max_exclude_chat_ids_none_when_empty_string(self):
         s = _load_settings_with_env(_env(MAX_EXCLUDE_CHAT_IDS=""))
         assert s.max_exclude_chat_ids is None
+
+    def test_extracts_token_from_oneme_auth_json(self):
+        s = _load_settings_with_env(_env(MAX_TOKEN='{"token":"real-token","ttl":123}'))
+        assert s.max_token == "real-token"
+
+    def test_extracts_token_from_url_encoded_oneme_auth_json(self):
+        s = _load_settings_with_env(_env(MAX_TOKEN="%7B%22token%22%3A%22real-token%22%7D"))
+        assert s.max_token == "real-token"
+
+    def test_extracts_token_from_cookie_assignment(self):
+        assert _extract_max_token('__oneme_auth={"token":"real-token"}') == "real-token"
 
 
 # ---------------------------------------------------------------------------

@@ -87,6 +87,7 @@ class MaxClient:
     WS_URL = "wss://ws-api.oneme.ru/websocket"
     HEARTBEAT_SEC = 30
     RECONNECT_SEC = 5
+    AUTH_TIMEOUT_SEC = 15
 
     def __init__(
         self,
@@ -105,6 +106,7 @@ class MaxClient:
         self._on_ready_cb = None
         self._on_message_cb = None
         self._heartbeat_task: asyncio.Task | None = None
+        self._auth_timeout_task: asyncio.Task | None = None
         self._session: aiohttp.ClientSession | None = None
         self._dispatch_counter = 0
         self._pending: dict[int, asyncio.Future] = {}
@@ -175,6 +177,33 @@ class MaxClient:
                 log.exception("Heartbeat error, stopping heartbeat loop")
                 break
 
+    def _cancel_auth_timeout(self) -> None:
+        if self._auth_timeout_task:
+            self._auth_timeout_task.cancel()
+            self._auth_timeout_task = None
+
+    def _start_auth_timeout(self, seq: int) -> None:
+        self._cancel_auth_timeout()
+        ws = self._ws
+        if ws is None:
+            return
+        self._auth_timeout_task = asyncio.create_task(
+            self._auth_timeout_loop(seq, ws)
+        )
+        self._auth_timeout_task.add_done_callback(_log_task_exception)
+
+    async def _auth_timeout_loop(
+        self, seq: int, ws: aiohttp.ClientWebSocketResponse
+    ) -> None:
+        await asyncio.sleep(self.AUTH_TIMEOUT_SEC)
+        if self._ws is ws and not ws.closed and self._my_id is None:
+            log.error(
+                "Max authorization timed out after %ss (auth seq=%s). Check MAX_TOKEN and MAX_DEVICE_ID.",
+                self.AUTH_TIMEOUT_SEC,
+                seq,
+            )
+            await ws.close()
+
     # ── main loop ──────────────────────────────────────────────────
 
     async def run(self):
@@ -191,6 +220,7 @@ class MaxClient:
                     ) as ws:
                         self._ws = ws
                         self._seq = 0
+                        self._my_id = None
                         self._pending.clear()
 
                         log.info("Connected. Sending handshake...")
@@ -226,6 +256,7 @@ class MaxClient:
                 finally:
                     if self._heartbeat_task:
                         self._heartbeat_task.cancel()
+                    self._cancel_auth_timeout()
                     for fut in self._pending.values():
                         if not fut.done():
                             fut.cancel()
@@ -263,6 +294,14 @@ class MaxClient:
                 fut.set_result({})
             log.warning("<<< ERROR op=%-4s seq=%s | %s", op, seq, self._mask_sensitive(str(payload)))
 
+        elif cmd == 3:
+            log.warning("<<< ERROR op=%-4s seq=%s | %s", op, seq, self._mask_sensitive(str(payload)))
+            if op == OpCode.AUTH_SNAPSHOT:
+                self._cancel_auth_timeout()
+                log.error("Max authorization failed. Check MAX_TOKEN and MAX_DEVICE_ID.")
+                if self._ws and not self._ws.closed:
+                    await self._ws.close()
+
         # server-initiated events — not a reply to one of our requests
         else:
             payload_preview = json.dumps(payload, ensure_ascii=False)
@@ -271,7 +310,7 @@ class MaxClient:
 
             if op == OpCode.HANDSHAKE and cmd == 1:
                 log.info("Handshake OK → sending auth token...")
-                await self._send(
+                seq = await self._send(
                     OpCode.AUTH_SNAPSHOT,
                     {
                         "chatsCount": 10,
@@ -279,8 +318,10 @@ class MaxClient:
                         "token": self.token,
                     },
                 )
+                self._start_auth_timeout(seq)
 
             elif op == OpCode.AUTH_SNAPSHOT and cmd == 1:
+                self._cancel_auth_timeout()
                 self._my_id = payload.get("profile", {}).get("id")
                 log.info("Authorized! my_id=%s", self._my_id)
                 if self.debug:
@@ -364,7 +405,12 @@ class MaxClient:
     @staticmethod
     def _mask_sensitive(text: str) -> str:
         """Best-effort masking for secrets in logs."""
-        masked = re.sub(r'("token"\s*:\s*")[^"]+(")', r'\1***\2', text, flags=re.IGNORECASE)
+        masked = re.sub(
+            r'("token"\s*:\s*")((?:\\.|[^"\\])*)("?)',
+            r'\1***\3',
+            text,
+            flags=re.IGNORECASE,
+        )
         masked = re.sub(r'(MAX_TOKEN=)[^\s]+', r'\1***', masked, flags=re.IGNORECASE)
         return masked
 

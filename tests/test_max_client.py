@@ -306,3 +306,15 @@ class TestMaskSensitive:
         masked = MaxClient._mask_sensitive(text)
         assert 'my-secret-token' not in masked
         assert 'MAX_TOKEN=***' in masked
+
+    def test_masks_nested_json_token_value(self):
+        text = '{"token":"{\\"token\\":\\"secret-value\\",\\"ttl\\":123}","x":1}'
+        masked = MaxClient._mask_sensitive(text)
+        assert "secret-value" not in masked
+        assert '"token":"***"' in masked
+
+    def test_masks_truncated_token_value(self):
+        text = '{"token":"secret-value'
+        masked = MaxClient._mask_sensitive(text)
+        assert "secret-value" not in masked
+        assert masked == '{"token":"***'

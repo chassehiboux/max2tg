@@ -1,0 +1,148 @@
+2026-06-16 00:19:07,710 [max2tg] INFO: Debug mode: ON
+2026-06-16 00:19:07,717 [max2tg] INFO: Using Telegram proxy: 188.253.23.149:3129
+2026-06-16 00:19:10,043 [telegram.Bot] DEBUG: Calling Bot API endpoint `getMe` with parameters `{}`
+2026-06-16 00:19:11,012 [telegram.Bot] DEBUG: Call to Bot API endpoint `getMe` finished with return value `{'id': 8937042822, 'is_bot': True, 'first_name': 'Максим', 'username': 'chassehiboux_max2tg_bot', 'can_join_groups': True, 'can_read_all_group_messages': False, 'supports_inline_queries': False, 'supports_guest_queries': False, 'can_connect_to_business': False, 'has_main_web_app': False, 'has_topics_enabled': False, 'allows_users_to_create_topics': False, 'can_manage_bots': False, 'supports_join_request_queries': False}`
+2026-06-16 00:19:11,014 [telegram.Bot] DEBUG: Calling Bot API endpoint `getMe` with parameters `{}`
+2026-06-16 00:19:11,100 [telegram.Bot] DEBUG: Call to Bot API endpoint `getMe` finished with return value `{'id': 8937042822, 'is_bot': True, 'first_name': 'Максим', 'username': 'chassehiboux_max2tg_bot', 'can_join_groups': True, 'can_read_all_group_messages': False, 'supports_inline_queries': False, 'supports_guest_queries': False, 'can_connect_to_business': False, 'has_main_web_app': False, 'has_topics_enabled': False, 'allows_users_to_create_topics': False, 'can_manage_bots': False, 'supports_join_request_queries': False}`
+2026-06-16 00:19:11,104 [app.tg_sender] INFO: Telegram bot ready: @chassehiboux_max2tg_bot
+2026-06-16 00:19:14,678 [telegram.ext.ExtBot] DEBUG: Calling Bot API endpoint `getMe` with parameters `{}`
+2026-06-16 00:19:15,739 [telegram.ext.ExtBot] DEBUG: Call to Bot API endpoint `getMe` finished with return value `{'id': 8937042822, 'is_bot': True, 'first_name': 'Максим', 'username': 'chassehiboux_max2tg_bot', 'can_join_groups': True, 'can_read_all_group_messages': False, 'supports_inline_queries': False, 'supports_guest_queries': False, 'can_connect_to_business': False, 'has_main_web_app': False, 'has_topics_enabled': False, 'allows_users_to_create_topics': False, 'can_manage_bots': False, 'supports_join_request_queries': False}`
+2026-06-16 00:19:15,744 [telegram.ext.ExtBot] DEBUG: This Bot is already initialized.
+2026-06-16 00:19:15,745 [apscheduler.scheduler] INFO: Scheduler started
+2026-06-16 00:19:15,746 [telegram.ext.Application] DEBUG: JobQueue started
+2026-06-16 00:19:15,747 [telegram.ext.Application] INFO: Application started
+2026-06-16 00:19:15,748 [telegram.ext.Updater] DEBUG: Updater started (polling)
+2026-06-16 00:19:15,748 [telegram.ext.Updater] DEBUG: Start network loop retry bootstrap del webhook
+2026-06-16 00:19:15,748 [telegram.ext.Updater] DEBUG: Deleting webhook
+2026-06-16 00:19:15,748 [telegram.ext.Updater] DEBUG: Dropping pending updates from Telegram server
+2026-06-16 00:19:15,748 [telegram.ext.ExtBot] DEBUG: Calling Bot API endpoint `deleteWebhook` with parameters `{'drop_pending_updates': True}`
+2026-06-16 00:19:15,748 [apscheduler.scheduler] DEBUG: Looking for jobs to run
+2026-06-16 00:19:15,748 [apscheduler.scheduler] DEBUG: No jobs; waiting until a job is added
+2026-06-16 00:19:15,991 [telegram.ext.ExtBot] DEBUG: Call to Bot API endpoint `deleteWebhook` finished with return value `True`
+2026-06-16 00:19:15,992 [telegram.ext.Updater] DEBUG: Bootstrap done
+2026-06-16 00:19:15,994 [telegram.ext.Updater] DEBUG: Waiting for polling to start
+2026-06-16 00:19:15,995 [telegram.ext.Updater] DEBUG: Polling updates from Telegram started
+2026-06-16 00:19:15,995 [max2tg] INFO: Telegram polling started (reply \u2192 Max enabled)
+2026-06-16 00:19:15,996 [max2tg] INFO: Starting Max listener...
+2026-06-16 00:19:15,996 [app.max_client] INFO: Connecting to wss://ws-api.oneme.ru/websocket ...
+2026-06-16 00:19:16,012 [telegram.ext.Updater] DEBUG: Start network loop retry getting Updates
+2026-06-16 00:19:16,013 [telegram.ext.ExtBot] DEBUG: Calling Bot API endpoint `getUpdates` with parameters `{'timeout': 10, 'offset': 0, 'allowed_updates': [<UpdateType.MESSAGE>, <UpdateType.EDITED_MESSAGE>, <UpdateType.CHANNEL_POST>, <UpdateType.EDITED_CHANNEL_POST>, <UpdateType.INLINE_QUERY>, <UpdateType.CHOSEN_INLINE_RESULT>, <UpdateType.CALLBACK_QUERY>, <UpdateType.SHIPPING_QUERY>, <UpdateType.PRE_CHECKOUT_QUERY>, <UpdateType.POLL>, <UpdateType.POLL_ANSWER>, <UpdateType.MY_CHAT_MEMBER>, <UpdateType.CHAT_MEMBER>, <UpdateType.CHAT_JOIN_REQUEST>, <UpdateType.CHAT_BOOST>, <UpdateType.REMOVED_CHAT_BOOST>, <UpdateType.MESSAGE_REACTION>, <UpdateType.MESSAGE_REACTION_COUNT>, <UpdateType.BUSINESS_CONNECTION>, <UpdateType.BUSINESS_MESSAGE>, <UpdateType.EDITED_BUSINESS_MESSAGE>, <UpdateType.DELETED_BUSINESS_MESSAGES>, <UpdateType.PURCHASED_PAID_MEDIA>]}`
+2026-06-16 00:19:16,454 [app.max_client] INFO: Connected. Sending handshake...
+2026-06-16 00:19:16,460 [app.max_client] DEBUG: >>> SEND op=6 seq=0 | {"ver": 11, "cmd": 0, "seq": 0, "opcode": 6, "payload": {"deviceId": "2ed69ca5-3e69-4e88-b6ef-6bd277b2e54c", "userAgent": {"deviceType": "WEB", "deviceName": "Chrome 131.0.0.0"}, "appVersion": "25.12.11"}}
+2026-06-16 00:19:16,545 [app.max_client] INFO: Handshake OK \u2192 sending auth token...
+2026-06-16 00:19:16,550 [app.max_client] DEBUG: >>> SEND op=19 seq=1 | {"ver": 11, "cmd": 0, "seq": 1, "opcode": 19, "payload": {"chatsCount": 10, "interactive": true, "token": "***
+2026-06-16 00:19:16,748 [app.max_client] INFO: Authorized! my_id=140241956
+2026-06-16 00:19:16,757 [app.max_client] INFO: Dumped debug\snapshot.json (32589 bytes)
+2026-06-16 00:19:16,758 [app.resolver] INFO: Snapshot parsed: 10 chats, my_id=140241956, 29 participant IDs to resolve
+2026-06-16 00:19:16,759 [app.max_listener] INFO: Batch-resolving 29 participants...
+2026-06-16 00:19:16,760 [app.max_client] DEBUG: >>> SEND op=32 seq=2 | {"ver": 11, "cmd": 0, "seq": 2, "opcode": 32, "payload": {"contactIds": [17040897, 113243014, 60548879, 202017815, 84402583, 138973976, 142883488, 140982947, 5961510, 46216232, 74863791, 17900592, 36243766, 38890808, 128636089, 8361024, 129055435, 126601933, 45482319, 127519700]}}
+2026-06-16 00:19:16,760 [app.max_client] DEBUG: >>> SEND op=32 seq=3 | {"ver": 11, "cmd": 0, "seq": 3, "opcode": 32, "payload": {"contactIds": [7491156, 7299034, 543835, 139944284, 88828001, 75996665, 62694141, 33838463]}}
+2026-06-16 00:19:26,772 [app.resolver] WARNING: Contact prefetch timed out after 10.0s: completed 0/2 chunks
+2026-06-16 00:19:26,776 [app.max_listener] INFO: Resolved users: {140241956: 'Данил Зуйкевич'}
+2026-06-16 00:19:26,777 [app.max_listener] INFO: Known chats: {1277756: 'DM:138973976', 139698303: 'DM:543835', -72005735508164: 'Первый Ягодный Курган', -68993983384096: 'АО "Энергосбытовая компания "Восток"', -72950460355122: 'Восток.Важно', -69694101241935: 'ВЗИД Состояние работы ПК Пирамида', 183364971: 'DM:45482319', 175301906: 'DM:36243766', 197135147: 'DM:60548879', 157280805: 'DM:17040897'}
+2026-06-16 00:19:26,778 [app.max_listener] INFO: Known users: {140241956: 'Данил Зуйкевич'}
+2026-06-16 00:19:26,779 [telegram.Bot] DEBUG: Calling Bot API endpoint `sendMessage` with parameters `{'chat_id': '491532109', 'text': '\u2705 <b>Max:</b> подключён | чатов: 10', 'parse_mode': <ParseMode.HTML>}`
+2026-06-16 00:19:26,984 [telegram.ext.ExtBot] DEBUG: Call to Bot API endpoint `getUpdates` finished with return value `[]`
+2026-06-16 00:19:26,988 [telegram.ext.ExtBot] DEBUG: No new updates found.
+2026-06-16 00:19:26,989 [telegram.ext.ExtBot] DEBUG: Calling Bot API endpoint `getUpdates` with parameters `{'timeout': 10, 'offset': 0, 'allowed_updates': [<UpdateType.MESSAGE>, <UpdateType.EDITED_MESSAGE>, <UpdateType.CHANNEL_POST>, <UpdateType.EDITED_CHANNEL_POST>, <UpdateType.INLINE_QUERY>, <UpdateType.CHOSEN_INLINE_RESULT>, <UpdateType.CALLBACK_QUERY>, <UpdateType.SHIPPING_QUERY>, <UpdateType.PRE_CHECKOUT_QUERY>, <UpdateType.POLL>, <UpdateType.POLL_ANSWER>, <UpdateType.MY_CHAT_MEMBER>, <UpdateType.CHAT_MEMBER>, <UpdateType.CHAT_JOIN_REQUEST>, <UpdateType.CHAT_BOOST>, <UpdateType.REMOVED_CHAT_BOOST>, <UpdateType.MESSAGE_REACTION>, <UpdateType.MESSAGE_REACTION_COUNT>, <UpdateType.BUSINESS_CONNECTION>, <UpdateType.BUSINESS_MESSAGE>, <UpdateType.EDITED_BUSINESS_MESSAGE>, <UpdateType.DELETED_BUSINESS_MESSAGES>, <UpdateType.PURCHASED_PAID_MEDIA>]}`
+2026-06-16 00:19:27,762 [app.tg_sender] ERROR: Failed to send to Telegram (attempt 1/3)
+Traceback (most recent call last):
+  File "C:\Users\hex_d\Downloads\chassehiboux\max2tg\app\tg_sender.py", line 53, in _retry
+    return await coro_factory()
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\_bot.py", line 1017, in send_message
+    return await self._send_message(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\_bot.py", line 729, in _send_message
+    result = await self._post(
+             ^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\_bot.py", line 617, in _post
+    return await self._do_post(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\_bot.py", line 646, in _do_post
+    result = await request.post(
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\request\_baserequest.py", line 202, in post
+    result = await self._request_wrapper(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\request\_baserequest.py", line 383, in _request_wrapper
+    raise BadRequest(message)
+telegram.error.BadRequest: Chat not found
+2026-06-16 00:19:29,783 [telegram.Bot] DEBUG: Calling Bot API endpoint `sendMessage` with parameters `{'chat_id': '491532109', 'text': '\u2705 <b>Max:</b> подключён | чатов: 10', 'parse_mode': <ParseMode.HTML>}`
+2026-06-16 00:19:30,124 [app.tg_sender] ERROR: Failed to send to Telegram (attempt 2/3)
+Traceback (most recent call last):
+  File "C:\Users\hex_d\Downloads\chassehiboux\max2tg\app\tg_sender.py", line 53, in _retry
+    return await coro_factory()
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\_bot.py", line 1017, in send_message
+    return await self._send_message(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\_bot.py", line 729, in _send_message
+    result = await self._post(
+             ^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\_bot.py", line 617, in _post
+    return await self._do_post(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\_bot.py", line 646, in _do_post
+    result = await request.post(
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\request\_baserequest.py", line 202, in post
+    result = await self._request_wrapper(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\request\_baserequest.py", line 383, in _request_wrapper
+    raise BadRequest(message)
+telegram.error.BadRequest: Chat not found
+2026-06-16 00:19:34,147 [telegram.Bot] DEBUG: Calling Bot API endpoint `sendMessage` with parameters `{'chat_id': '491532109', 'text': '\u2705 <b>Max:</b> подключён | чатов: 10', 'parse_mode': <ParseMode.HTML>}`
+2026-06-16 00:19:34,328 [app.tg_sender] ERROR: Failed to send to Telegram (attempt 3/3)
+Traceback (most recent call last):
+  File "C:\Users\hex_d\Downloads\chassehiboux\max2tg\app\tg_sender.py", line 53, in _retry
+    return await coro_factory()
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\_bot.py", line 1017, in send_message
+    return await self._send_message(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\_bot.py", line 729, in _send_message
+    result = await self._post(
+             ^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\_bot.py", line 617, in _post
+    return await self._do_post(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\_bot.py", line 646, in _do_post
+    result = await request.post(
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\request\_baserequest.py", line 202, in post
+    result = await self._request_wrapper(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hex_d\AppData\Local\Programs\Python\Python312\Lib\site-packages\telegram\request\_baserequest.py", line 383, in _request_wrapper
+    raise BadRequest(message)
+telegram.error.BadRequest: Chat not found
+2026-06-16 00:19:37,080 [telegram.ext.ExtBot] DEBUG: Call to Bot API endpoint `getUpdates` finished with return value `[]`
+2026-06-16 00:19:37,081 [telegram.ext.ExtBot] DEBUG: No new updates found.
+2026-06-16 00:19:37,082 [telegram.ext.ExtBot] DEBUG: Calling Bot API endpoint `getUpdates` with parameters `{'timeout': 10, 'offset': 0, 'allowed_updates': [<UpdateType.MESSAGE>, <UpdateType.EDITED_MESSAGE>, <UpdateType.CHANNEL_POST>, <UpdateType.EDITED_CHANNEL_POST>, <UpdateType.INLINE_QUERY>, <UpdateType.CHOSEN_INLINE_RESULT>, <UpdateType.CALLBACK_QUERY>, <UpdateType.SHIPPING_QUERY>, <UpdateType.PRE_CHECKOUT_QUERY>, <UpdateType.POLL>, <UpdateType.POLL_ANSWER>, <UpdateType.MY_CHAT_MEMBER>, <UpdateType.CHAT_MEMBER>, <UpdateType.CHAT_JOIN_REQUEST>, <UpdateType.CHAT_BOOST>, <UpdateType.REMOVED_CHAT_BOOST>, <UpdateType.MESSAGE_REACTION>, <UpdateType.MESSAGE_REACTION_COUNT>, <UpdateType.BUSINESS_CONNECTION>, <UpdateType.BUSINESS_MESSAGE>, <UpdateType.EDITED_BUSINESS_MESSAGE>, <UpdateType.DELETED_BUSINESS_MESSAGES>, <UpdateType.PURCHASED_PAID_MEDIA>]}`
+2026-06-16 00:19:46,486 [app.max_client] DEBUG: >>> SEND op=1 seq=4 | {"ver": 11, "cmd": 0, "seq": 4, "opcode": 1, "payload": {"interactive": false}}
+2026-06-16 00:19:46,567 [app.max_client] DEBUG: Heartbeat op=1
+2026-06-16 00:19:47,175 [telegram.ext.ExtBot] DEBUG: Call to Bot API endpoint `getUpdates` finished with return value `[]`
+2026-06-16 00:19:47,180 [telegram.ext.ExtBot] DEBUG: No new updates found.
+2026-06-16 00:19:47,180 [telegram.ext.ExtBot] DEBUG: Calling Bot API endpoint `getUpdates` with parameters `{'timeout': 10, 'offset': 0, 'allowed_updates': [<UpdateType.MESSAGE>, <UpdateType.EDITED_MESSAGE>, <UpdateType.CHANNEL_POST>, <UpdateType.EDITED_CHANNEL_POST>, <UpdateType.INLINE_QUERY>, <UpdateType.CHOSEN_INLINE_RESULT>, <UpdateType.CALLBACK_QUERY>, <UpdateType.SHIPPING_QUERY>, <UpdateType.PRE_CHECKOUT_QUERY>, <UpdateType.POLL>, <UpdateType.POLL_ANSWER>, <UpdateType.MY_CHAT_MEMBER>, <UpdateType.CHAT_MEMBER>, <UpdateType.CHAT_JOIN_REQUEST>, <UpdateType.CHAT_BOOST>, <UpdateType.REMOVED_CHAT_BOOST>, <UpdateType.MESSAGE_REACTION>, <UpdateType.MESSAGE_REACTION_COUNT>, <UpdateType.BUSINESS_CONNECTION>, <UpdateType.BUSINESS_MESSAGE>, <UpdateType.EDITED_BUSINESS_MESSAGE>, <UpdateType.DELETED_BUSINESS_MESSAGES>, <UpdateType.PURCHASED_PAID_MEDIA>]}`
+2026-06-16 00:19:57,307 [telegram.ext.ExtBot] DEBUG: Call to Bot API endpoint `getUpdates` finished with return value `[]`
+2026-06-16 00:19:57,313 [telegram.ext.ExtBot] DEBUG: No new updates found.
+2026-06-16 00:19:57,317 [telegram.ext.ExtBot] DEBUG: Calling Bot API endpoint `getUpdates` with parameters `{'timeout': 10, 'offset': 0, 'allowed_updates': [<UpdateType.MESSAGE>, <UpdateType.EDITED_MESSAGE>, <UpdateType.CHANNEL_POST>, <UpdateType.EDITED_CHANNEL_POST>, <UpdateType.INLINE_QUERY>, <UpdateType.CHOSEN_INLINE_RESULT>, <UpdateType.CALLBACK_QUERY>, <UpdateType.SHIPPING_QUERY>, <UpdateType.PRE_CHECKOUT_QUERY>, <UpdateType.POLL>, <UpdateType.POLL_ANSWER>, <UpdateType.MY_CHAT_MEMBER>, <UpdateType.CHAT_MEMBER>, <UpdateType.CHAT_JOIN_REQUEST>, <UpdateType.CHAT_BOOST>, <UpdateType.REMOVED_CHAT_BOOST>, <UpdateType.MESSAGE_REACTION>, <UpdateType.MESSAGE_REACTION_COUNT>, <UpdateType.BUSINESS_CONNECTION>, <UpdateType.BUSINESS_MESSAGE>, <UpdateType.EDITED_BUSINESS_MESSAGE>, <UpdateType.DELETED_BUSINESS_MESSAGES>, <UpdateType.PURCHASED_PAID_MEDIA>]}`
+2026-06-16 00:20:07,500 [telegram.ext.ExtBot] DEBUG: Call to Bot API endpoint `getUpdates` finished with return value `[]`
+2026-06-16 00:20:07,505 [telegram.ext.ExtBot] DEBUG: No new updates found.
+2026-06-16 00:20:07,506 [telegram.ext.ExtBot] DEBUG: Calling Bot API endpoint `getUpdates` with parameters `{'timeout': 10, 'offset': 0, 'allowed_updates': [<UpdateType.MESSAGE>, <UpdateType.EDITED_MESSAGE>, <UpdateType.CHANNEL_POST>, <UpdateType.EDITED_CHANNEL_POST>, <UpdateType.INLINE_QUERY>, <UpdateType.CHOSEN_INLINE_RESULT>, <UpdateType.CALLBACK_QUERY>, <UpdateType.SHIPPING_QUERY>, <UpdateType.PRE_CHECKOUT_QUERY>, <UpdateType.POLL>, <UpdateType.POLL_ANSWER>, <UpdateType.MY_CHAT_MEMBER>, <UpdateType.CHAT_MEMBER>, <UpdateType.CHAT_JOIN_REQUEST>, <UpdateType.CHAT_BOOST>, <UpdateType.REMOVED_CHAT_BOOST>, <UpdateType.MESSAGE_REACTION>, <UpdateType.MESSAGE_REACTION_COUNT>, <UpdateType.BUSINESS_CONNECTION>, <UpdateType.BUSINESS_MESSAGE>, <UpdateType.EDITED_BUSINESS_MESSAGE>, <UpdateType.DELETED_BUSINESS_MESSAGES>, <UpdateType.PURCHASED_PAID_MEDIA>]}`
+2026-06-16 00:20:16,483 [app.max_client] DEBUG: >>> SEND op=1 seq=5 | {"ver": 11, "cmd": 0, "seq": 5, "opcode": 1, "payload": {"interactive": false}}
+2026-06-16 00:20:16,559 [app.max_client] DEBUG: Heartbeat op=1
+2026-06-16 00:20:17,639 [telegram.ext.ExtBot] DEBUG: Call to Bot API endpoint `getUpdates` finished with return value `[]`
+2026-06-16 00:20:17,642 [telegram.ext.ExtBot] DEBUG: No new updates found.
+2026-06-16 00:20:17,642 [telegram.ext.ExtBot] DEBUG: Calling Bot API endpoint `getUpdates` with parameters `{'timeout': 10, 'offset': 0, 'allowed_updates': [<UpdateType.MESSAGE>, <UpdateType.EDITED_MESSAGE>, <UpdateType.CHANNEL_POST>, <UpdateType.EDITED_CHANNEL_POST>, <UpdateType.INLINE_QUERY>, <UpdateType.CHOSEN_INLINE_RESULT>, <UpdateType.CALLBACK_QUERY>, <UpdateType.SHIPPING_QUERY>, <UpdateType.PRE_CHECKOUT_QUERY>, <UpdateType.POLL>, <UpdateType.POLL_ANSWER>, <UpdateType.MY_CHAT_MEMBER>, <UpdateType.CHAT_MEMBER>, <UpdateType.CHAT_JOIN_REQUEST>, <UpdateType.CHAT_BOOST>, <UpdateType.REMOVED_CHAT_BOOST>, <UpdateType.MESSAGE_REACTION>, <UpdateType.MESSAGE_REACTION_COUNT>, <UpdateType.BUSINESS_CONNECTION>, <UpdateType.BUSINESS_MESSAGE>, <UpdateType.EDITED_BUSINESS_MESSAGE>, <UpdateType.DELETED_BUSINESS_MESSAGES>, <UpdateType.PURCHASED_PAID_MEDIA>]}`
+2026-06-16 00:20:27,878 [telegram.ext.ExtBot] DEBUG: Call to Bot API endpoint `getUpdates` finished with return value `[]`
+2026-06-16 00:20:27,883 [telegram.ext.ExtBot] DEBUG: No new updates found.
+2026-06-16 00:20:27,884 [telegram.ext.ExtBot] DEBUG: Calling Bot API endpoint `getUpdates` with parameters `{'timeout': 10, 'offset': 0, 'allowed_updates': [<UpdateType.MESSAGE>, <UpdateType.EDITED_MESSAGE>, <UpdateType.CHANNEL_POST>, <UpdateType.EDITED_CHANNEL_POST>, <UpdateType.INLINE_QUERY>, <UpdateType.CHOSEN_INLINE_RESULT>, <UpdateType.CALLBACK_QUERY>, <UpdateType.SHIPPING_QUERY>, <UpdateType.PRE_CHECKOUT_QUERY>, <UpdateType.POLL>, <UpdateType.POLL_ANSWER>, <UpdateType.MY_CHAT_MEMBER>, <UpdateType.CHAT_MEMBER>, <UpdateType.CHAT_JOIN_REQUEST>, <UpdateType.CHAT_BOOST>, <UpdateType.REMOVED_CHAT_BOOST>, <UpdateType.MESSAGE_REACTION>, <UpdateType.MESSAGE_REACTION_COUNT>, <UpdateType.BUSINESS_CONNECTION>, <UpdateType.BUSINESS_MESSAGE>, <UpdateType.EDITED_BUSINESS_MESSAGE>, <UpdateType.DELETED_BUSINESS_MESSAGES>, <UpdateType.PURCHASED_PAID_MEDIA>]}`
+2026-06-16 00:20:38,014 [telegram.ext.ExtBot] DEBUG: Call to Bot API endpoint `getUpdates` finished with return value `[]`
+2026-06-16 00:20:38,019 [telegram.ext.ExtBot] DEBUG: No new updates found.
+2026-06-16 00:20:38,020 [telegram.ext.ExtBot] DEBUG: Calling Bot API endpoint `getUpdates` with parameters `{'timeout': 10, 'offset': 0, 'allowed_updates': [<UpdateType.MESSAGE>, <UpdateType.EDITED_MESSAGE>, <UpdateType.CHANNEL_POST>, <UpdateType.EDITED_CHANNEL_POST>, <UpdateType.INLINE_QUERY>, <UpdateType.CHOSEN_INLINE_RESULT>, <UpdateType.CALLBACK_QUERY>, <UpdateType.SHIPPING_QUERY>, <UpdateType.PRE_CHECKOUT_QUERY>, <UpdateType.POLL>, <UpdateType.POLL_ANSWER>, <UpdateType.MY_CHAT_MEMBER>, <UpdateType.CHAT_MEMBER>, <UpdateType.CHAT_JOIN_REQUEST>, <UpdateType.CHAT_BOOST>, <UpdateType.REMOVED_CHAT_BOOST>, <UpdateType.MESSAGE_REACTION>, <UpdateType.MESSAGE_REACTION_COUNT>, <UpdateType.BUSINESS_CONNECTION>, <UpdateType.BUSINESS_MESSAGE>, <UpdateType.EDITED_BUSINESS_MESSAGE>, <UpdateType.DELETED_BUSINESS_MESSAGES>, <UpdateType.PURCHASED_PAID_MEDIA>]}`
+2026-06-16 00:20:46,481 [app.max_client] DEBUG: >>> SEND op=1 seq=6 | {"ver": 11, "cmd": 0, "seq": 6, "opcode": 1, "payload": {"interactive": false}}
+2026-06-16 00:20:46,560 [app.max_client] DEBUG: Heartbeat op=1
+2026-06-16 00:20:48,256 [telegram.ext.ExtBot] DEBUG: Call to Bot API endpoint `getUpdates` finished with return value `[]`
+2026-06-16 00:20:48,260 [telegram.ext.ExtBot] DEBUG: No new updates found.
+2026-06-16 00:20:48,261 [telegram.ext.ExtBot] DEBUG: Calling Bot API endpoint `getUpdates` with parameters `{'timeout': 10, 'offset': 0, 'allowed_updates': [<UpdateType.MESSAGE>, <UpdateType.EDITED_MESSAGE>, <UpdateType.CHANNEL_POST>, <UpdateType.EDITED_CHANNEL_POST>, <UpdateType.INLINE_QUERY>, <UpdateType.CHOSEN_INLINE_RESULT>, <UpdateType.CALLBACK_QUERY>, <UpdateType.SHIPPING_QUERY>, <UpdateType.PRE_CHECKOUT_QUERY>, <UpdateType.POLL>, <UpdateType.POLL_ANSWER>, <UpdateType.MY_CHAT_MEMBER>, <UpdateType.CHAT_MEMBER>, <UpdateType.CHAT_JOIN_REQUEST>, <UpdateType.CHAT_BOOST>, <UpdateType.REMOVED_CHAT_BOOST>, <UpdateType.MESSAGE_REACTION>, <UpdateType.MESSAGE_REACTION_COUNT>, <UpdateType.BUSINESS_CONNECTION>, <UpdateType.BUSINESS_MESSAGE>, <UpdateType.EDITED_BUSINESS_MESSAGE>, <UpdateType.DELETED_BUSINESS_MESSAGES>, <UpdateType.PURCHASED_PAID_MEDIA>]}`
