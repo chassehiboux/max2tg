@@ -6,3 +6,4 @@ debug/
 .claude/
 *.code*
 *.cl*
+.max2tg-runner.json

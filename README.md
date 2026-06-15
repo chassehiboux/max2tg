@@ -118,6 +118,30 @@ docker-compose up -d --build
 
 ### Локальный запуск
 
+#### Windows (PowerShell) — быстрый старт
+
+```powershell
+git clone <repo-url> max2tg
+cd max2tg
+
+.\start_bot.ps1
+```
+
+Что делает скрипт:
+- при первом запуске спрашивает `MAX_TOKEN`, `MAX_DEVICE_ID`, `TG_BOT_TOKEN`, `TG_CHAT_ID` и записывает их в `.env`
+- при следующем запуске предлагает либо оставить текущие креды, либо ввести новые
+- создаёт `.venv`, ставит зависимости из `requirements.txt` и запускает бота в фоне
+
+Остановка:
+
+```powershell
+.\stop_bot.ps1
+```
+
+Логи процесса:
+- стандартные логи приложения: `logs/max2tg.log`
+- консольный вывод фонового процесса: `logs/max2tg-console.log`
+
 #### Linux / macOS
 
 ```bash
@@ -362,6 +386,30 @@ docker-compose up -d --build
 ```
 
 ### Local
+
+#### Windows (PowerShell) — quick start
+
+```powershell
+git clone <repo-url> max2tg
+cd max2tg
+
+.\start_bot.ps1
+```
+
+What the script does:
+- on the first run, asks for `MAX_TOKEN`, `MAX_DEVICE_ID`, `TG_BOT_TOKEN`, and `TG_CHAT_ID`, then writes them to `.env`
+- on later runs, offers either to keep the current credentials or enter new ones
+- creates `.venv`, installs dependencies from `requirements.txt`, and starts the bot in the background
+
+Stop:
+
+```powershell
+.\stop_bot.ps1
+```
+
+Process logs:
+- application logs: `logs/max2tg.log`
+- console output of the background process: `logs/max2tg-console.log`
 
 #### Linux / macOS
 
