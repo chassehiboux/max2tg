@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime
 from html import escape
@@ -276,6 +277,7 @@ def create_max_client(
     _first_connect = True
     _notif_count = 0
     _last_notif_time: datetime | None = None
+    _snapshot_resolve_task: asyncio.Task | None = None
 
     async def _deliver_payload(target_chat_id: int, raw_payload: dict, binding: dict) -> None:
         msg = client._parse_message(raw_payload)
@@ -350,6 +352,35 @@ def create_max_client(
 
     router.set_delivery_callback(_deliver_payload)
 
+    def _cancel_snapshot_resolve_task() -> None:
+        nonlocal _snapshot_resolve_task
+        if _snapshot_resolve_task is not None and not _snapshot_resolve_task.done():
+            _snapshot_resolve_task.cancel()
+        _snapshot_resolve_task = None
+
+    def _log_snapshot_task_result(task: asyncio.Task) -> None:
+        nonlocal _snapshot_resolve_task
+        if _snapshot_resolve_task is task:
+            _snapshot_resolve_task = None
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            log.exception("Background snapshot contact resolution failed", exc_info=exc)
+
+    async def _resolve_snapshot_contacts(participant_ids: list[int]) -> None:
+        if not participant_ids:
+            return
+
+        log.info("Batch-resolving %d participants in background...", len(participant_ids))
+        await resolver.resolve_users_batch(participant_ids)
+        log.info("Resolved users: %s", resolver.users)
+        log.info("Known chats: %s", resolver.chats)
+        log.info("Known users: %s", resolver.users)
+
+        for chat_id, chat_title in resolver.chats.items():
+            router.store.ensure_chat(chat_id, chat_title, resolver.chat_types.get(chat_id))
+
     def _can_notify() -> bool:
         if _last_notif_time is None:
             return True
@@ -362,17 +393,10 @@ def create_max_client(
 
     @client.on_ready
     async def handle_ready(snapshot: dict):
-        nonlocal _first_connect
+        nonlocal _first_connect, _snapshot_resolve_task
+        _cancel_snapshot_resolve_task()
         participant_ids = resolver.load_snapshot(snapshot)
         await router.sync_snapshot(snapshot)
-
-        if participant_ids:
-            log.info("Batch-resolving %d participants...", len(participant_ids))
-            await resolver.resolve_users_batch(participant_ids)
-            log.info("Resolved users: %s", resolver.users)
-
-            log.info("Known chats: %s", resolver.chats)
-            log.info("Known users: %s", resolver.users)
 
         for chat_id, chat_title in resolver.chats.items():
             router.store.ensure_chat(chat_id, chat_title, resolver.chat_types.get(chat_id))
@@ -389,9 +413,14 @@ def create_max_client(
             if binding.get("state") == "pending_bot":
                 await router.flush_pending_chat(binding["max_chat_id"])
 
+        if participant_ids:
+            _snapshot_resolve_task = asyncio.create_task(_resolve_snapshot_contacts(participant_ids))
+            _snapshot_resolve_task.add_done_callback(_log_snapshot_task_result)
+
     @client.on_disconnect
     async def handle_disconnect():
         nonlocal _notif_count, _last_notif_time
+        _cancel_snapshot_resolve_task()
         if not _can_notify():
             log.info("Disconnect notification suppressed (throttle)")
             return

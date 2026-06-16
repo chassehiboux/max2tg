@@ -1,5 +1,6 @@
 """Tests for disconnect notification throttling in app/max_listener.py."""
 
+import asyncio
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,6 +21,7 @@ def _make_client(tmp_path):
         sender=sender,
         router=router,
     )
+    client._test_router = router
     return client, sender
 
 
@@ -131,3 +133,37 @@ class TestReconnectNotification:
         await client._on_ready_cb(snapshot)
         sender.send_admin.assert_called_once()
         assert "восстановлено" in sender.send_admin.call_args[0][0]
+
+
+class TestReadyContactResolution:
+    async def test_dm_titles_are_updated_after_background_contact_resolution(self, tmp_path):
+        client, _ = _make_client(tmp_path)
+        snapshot = {
+            "profile": {"id": 1, "names": []},
+            "chats": [
+                {
+                    "id": 99,
+                    "type": "DIALOG",
+                    "participants": {"1": {}, "55": {}},
+                }
+            ],
+        }
+
+        async def fake_resolve_users_batch(self, user_ids):
+            assert 55 in user_ids
+            self.users[55] = "Анна Безверхая"
+            self._refresh_dialog_labels()
+
+        with patch("app.max_listener.ContactResolver.resolve_users_batch", new=fake_resolve_users_batch):
+            await client._on_ready_cb(snapshot)
+
+            binding = client._test_router.store.get_chat(99)
+            assert binding["max_chat_title"] == "DM:55"
+
+            for _ in range(5):
+                await asyncio.sleep(0)
+                binding = client._test_router.store.get_chat(99)
+                if binding["max_chat_title"] == "Анна Безверхая":
+                    break
+
+        assert binding["max_chat_title"] == "Анна Безверхая"
