@@ -1,207 +1,124 @@
-"""Tests for app/config.py — load_settings."""
+"""Tests for app/config.py."""
 
 import os
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from app.config import Settings, _extract_max_token, load_settings
 
 
 def _load_settings_with_env(env: dict) -> Settings:
-    """Call load_settings with a fully isolated environment, suppressing .env file loading."""
     with patch("app.config.load_dotenv"), patch.dict(os.environ, env, clear=True):
         return load_settings()
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 _VALID_ENV = {
     "MAX_TOKEN": "token123",
     "MAX_DEVICE_ID": "device-abc",
     "TG_BOT_TOKEN": "123456:AAABBBCCC",
-    "TG_CHAT_ID": "-100123456",
+    "TG_ADMIN_ID": "123456789",
 }
 
 
 def _env(**overrides):
-    """Return a copy of the valid env dict with any overrides applied."""
-    e = dict(_VALID_ENV)
-    e.update(overrides)
-    return e
+    env = dict(_VALID_ENV)
+    env.update(overrides)
+    return env
 
-
-# ---------------------------------------------------------------------------
-# Settings dataclass
-# ---------------------------------------------------------------------------
 
 class TestSettingsDataclass:
+    def test_defaults(self):
+        settings = Settings(
+            max_token="t",
+            max_device_id="d",
+            tg_bot_token="b",
+            tg_admin_id=1,
+        )
+        assert settings.debug is False
+        assert settings.reply_enabled is False
+        assert settings.max_chat_ids is None
+        assert settings.max_exclude_chat_ids is None
+
     def test_frozen(self):
-        s = Settings(
-            max_token="t", max_device_id="d", tg_bot_token="b", tg_chat_id="c"
+        settings = Settings(
+            max_token="t",
+            max_device_id="d",
+            tg_bot_token="b",
+            tg_admin_id=1,
         )
         with pytest.raises((AttributeError, TypeError)):
-            s.max_token = "changed"  # type: ignore[misc]
+            settings.max_token = "changed"  # type: ignore[misc]
 
-    def test_defaults(self):
-        s = Settings(
-            max_token="t", max_device_id="d", tg_bot_token="b", tg_chat_id="c"
-        )
-        assert s.debug is False
-        assert s.reply_enabled is False
-        assert s.max_chat_ids is None
-        assert s.max_exclude_chat_ids is None
-
-
-# ---------------------------------------------------------------------------
-# load_settings — valid env
-# ---------------------------------------------------------------------------
 
 class TestLoadSettingsValid:
     def test_required_fields_populated(self):
-        s = _load_settings_with_env(_env())
-        assert s.max_token == "token123"
-        assert s.max_device_id == "device-abc"
-        assert s.tg_bot_token == "123456:AAABBBCCC"
-        assert s.tg_chat_id == "-100123456"
+        settings = _load_settings_with_env(_env())
+        assert settings.max_token == "token123"
+        assert settings.max_device_id == "device-abc"
+        assert settings.tg_bot_token == "123456:AAABBBCCC"
+        assert settings.tg_admin_id == 123456789
 
-    def test_debug_default_false(self):
-        s = _load_settings_with_env(_env())
-        assert s.debug is False
+    @pytest.mark.parametrize("value", ["1", "true", "yes", "True"])
+    def test_debug_true_values(self, value):
+        settings = _load_settings_with_env(_env(DEBUG=value))
+        assert settings.debug is True
 
-    def test_debug_true_via_1(self):
-        s = _load_settings_with_env(_env(DEBUG="1"))
-        assert s.debug is True
+    @pytest.mark.parametrize("value", ["", "0", "false", "no"])
+    def test_debug_false_values(self, value):
+        settings = _load_settings_with_env(_env(DEBUG=value))
+        assert settings.debug is False
 
-    def test_debug_true_via_true(self):
-        s = _load_settings_with_env(_env(DEBUG="true"))
-        assert s.debug is True
+    @pytest.mark.parametrize("value", ["1", "true", "yes"])
+    def test_reply_enabled_true_values(self, value):
+        settings = _load_settings_with_env(_env(REPLY_ENABLED=value))
+        assert settings.reply_enabled is True
 
-    def test_debug_true_via_yes(self):
-        s = _load_settings_with_env(_env(DEBUG="yes"))
-        assert s.debug is True
+    def test_reply_enabled_false_by_default(self):
+        settings = _load_settings_with_env(_env())
+        assert settings.reply_enabled is False
 
-    def test_debug_true_mixed_case(self):
-        s = _load_settings_with_env(_env(DEBUG="True"))
-        assert s.debug is True
+    def test_optional_max_chat_ids(self):
+        settings = _load_settings_with_env(_env(MAX_CHAT_IDS="-123,-456"))
+        assert settings.max_chat_ids == "-123,-456"
 
-    def test_debug_false_via_empty_string(self):
-        s = _load_settings_with_env(_env(DEBUG=""))
-        assert s.debug is False
-
-    def test_debug_false_via_0(self):
-        s = _load_settings_with_env(_env(DEBUG="0"))
-        assert s.debug is False
-
-    def test_debug_false_via_no(self):
-        s = _load_settings_with_env(_env(DEBUG="no"))
-        assert s.debug is False
-
-    def test_reply_enabled_default_false(self):
-        s = _load_settings_with_env(_env())
-        assert s.reply_enabled is False
-
-    def test_reply_enabled_true_via_1(self):
-        s = _load_settings_with_env(_env(REPLY_ENABLED="1"))
-        assert s.reply_enabled is True
-
-    def test_reply_enabled_true_via_yes(self):
-        s = _load_settings_with_env(_env(REPLY_ENABLED="yes"))
-        assert s.reply_enabled is True
-
-    def test_reply_enabled_false_via_false(self):
-        s = _load_settings_with_env(_env(REPLY_ENABLED="false"))
-        assert s.reply_enabled is False
-
-    def test_returns_settings_instance(self):
-        s = _load_settings_with_env(_env())
-        assert isinstance(s, Settings)
-
-    def test_max_chat_ids_none_when_not_set(self):
-        s = _load_settings_with_env(_env())
-        assert s.max_chat_ids is None
-
-    def test_max_chat_ids_populated_when_set(self):
-        s = _load_settings_with_env(_env(MAX_CHAT_IDS="-123,-456"))
-        assert s.max_chat_ids == "-123,-456"
-
-    def test_max_chat_ids_none_when_empty_string(self):
-        s = _load_settings_with_env(_env(MAX_CHAT_IDS=""))
-        assert s.max_chat_ids is None
-
-    def test_max_exclude_chat_ids_none_when_not_set(self):
-        s = _load_settings_with_env(_env())
-        assert s.max_exclude_chat_ids is None
-
-    def test_max_exclude_chat_ids_populated_when_set(self):
-        s = _load_settings_with_env(_env(MAX_EXCLUDE_CHAT_IDS="-123,-456"))
-        assert s.max_exclude_chat_ids == "-123,-456"
-
-    def test_max_exclude_chat_ids_none_when_empty_string(self):
-        s = _load_settings_with_env(_env(MAX_EXCLUDE_CHAT_IDS=""))
-        assert s.max_exclude_chat_ids is None
+    def test_optional_exclude_chat_ids(self):
+        settings = _load_settings_with_env(_env(MAX_EXCLUDE_CHAT_IDS="-123,-456"))
+        assert settings.max_exclude_chat_ids == "-123,-456"
 
     def test_extracts_token_from_oneme_auth_json(self):
-        s = _load_settings_with_env(_env(MAX_TOKEN='{"token":"real-token","ttl":123}'))
-        assert s.max_token == "real-token"
+        settings = _load_settings_with_env(_env(MAX_TOKEN='{"token":"real-token","ttl":123}'))
+        assert settings.max_token == "real-token"
 
     def test_extracts_token_from_url_encoded_oneme_auth_json(self):
-        s = _load_settings_with_env(_env(MAX_TOKEN="%7B%22token%22%3A%22real-token%22%7D"))
-        assert s.max_token == "real-token"
+        settings = _load_settings_with_env(_env(MAX_TOKEN="%7B%22token%22%3A%22real-token%22%7D"))
+        assert settings.max_token == "real-token"
 
     def test_extracts_token_from_cookie_assignment(self):
         assert _extract_max_token('__oneme_auth={"token":"real-token"}') == "real-token"
 
 
-# ---------------------------------------------------------------------------
-# load_settings — missing required variables
-# ---------------------------------------------------------------------------
-
 class TestLoadSettingsMissing:
     def _env_without(self, *keys):
-        e = dict(_VALID_ENV)
-        for k in keys:
-            e.pop(k, None)
-        return e
+        env = dict(_VALID_ENV)
+        for key in keys:
+            env.pop(key, None)
+        return env
 
-    def test_missing_max_token_raises(self):
+    @pytest.mark.parametrize("key", ["MAX_TOKEN", "MAX_DEVICE_ID", "TG_BOT_TOKEN", "TG_ADMIN_ID"])
+    def test_missing_required_values_raise(self, key):
         with pytest.raises(SystemExit) as exc:
-            _load_settings_with_env(self._env_without("MAX_TOKEN"))
-        assert "MAX_TOKEN" in str(exc.value)
+            _load_settings_with_env(self._env_without(key))
+        assert key in str(exc.value)
 
-    def test_missing_max_device_id_raises(self):
-        with pytest.raises(SystemExit) as exc:
-            _load_settings_with_env(self._env_without("MAX_DEVICE_ID"))
-        assert "MAX_DEVICE_ID" in str(exc.value)
-
-    def test_missing_tg_bot_token_raises(self):
-        with pytest.raises(SystemExit) as exc:
-            _load_settings_with_env(self._env_without("TG_BOT_TOKEN"))
-        assert "TG_BOT_TOKEN" in str(exc.value)
-
-    def test_missing_tg_chat_id_raises(self):
-        with pytest.raises(SystemExit) as exc:
-            _load_settings_with_env(self._env_without("TG_CHAT_ID"))
-        assert "TG_CHAT_ID" in str(exc.value)
-
-    def test_missing_multiple_vars_reports_all(self):
-        missing = ["MAX_TOKEN", "TG_BOT_TOKEN"]
-        with pytest.raises(SystemExit) as exc:
-            _load_settings_with_env(self._env_without(*missing))
-        msg = str(exc.value)
-        for var in missing:
-            assert var in msg
-
-    def test_completely_empty_env_reports_all_required(self):
-        required = ["MAX_TOKEN", "MAX_DEVICE_ID", "TG_BOT_TOKEN", "TG_CHAT_ID"]
+    def test_empty_env_reports_all_required(self):
+        required = ["MAX_TOKEN", "MAX_DEVICE_ID", "TG_BOT_TOKEN", "TG_ADMIN_ID"]
         with pytest.raises(SystemExit) as exc:
             _load_settings_with_env({})
-        msg = str(exc.value)
-        for var in required:
-            assert var in msg
+        for name in required:
+            assert name in str(exc.value)
 
-    def test_empty_string_value_treated_as_missing(self):
+    def test_invalid_admin_id_raises(self):
         with pytest.raises(SystemExit) as exc:
-            _load_settings_with_env(_env(MAX_TOKEN=""))
-        assert "MAX_TOKEN" in str(exc.value)
+            _load_settings_with_env(_env(TG_ADMIN_ID="chat-id"))
+        assert "TG_ADMIN_ID" in str(exc.value)

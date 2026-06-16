@@ -2,6 +2,7 @@ import logging
 from datetime import datetime
 from html import escape
 
+from app.chat_router import ChatRouter
 from app.max_client import MaxClient, MaxMessage
 from app.resolver import ContactResolver
 from app.tg_sender import TelegramSender, reply_keyboard
@@ -46,6 +47,7 @@ async def _send_attach(
     attach: dict,
     client: MaxClient,
     sender: TelegramSender,
+    target_chat_id: int,
     header_text: str,
     kb=None,
 ) -> bool:
@@ -63,9 +65,14 @@ async def _send_attach(
             return False
         data = await client.download_file(url)
         if data:
-            await sender.send_photo(data, caption=header_text, reply_markup=kb)
+            await sender.send_photo(target_chat_id, data, caption=header_text, reply_markup=kb, raise_on_failure=True)
             return True
-        await sender.send(f"{header_text}\n<i>[фото — не удалось загрузить]</i>", reply_markup=kb)
+        await sender.send_text(
+            target_chat_id,
+            f"{header_text}\n<i>[фото — не удалось загрузить]</i>",
+            reply_markup=kb,
+            raise_on_failure=True,
+        )
         return True
 
     if atype == "VIDEO":
@@ -73,9 +80,15 @@ async def _send_attach(
         if thumb:
             data = await client.download_file(thumb)
             if data:
-                await sender.send_photo(data, caption=f"{header_text}\n<i>[видео — превью]</i>", reply_markup=kb)
+                await sender.send_photo(
+                    target_chat_id,
+                    data,
+                    caption=f"{header_text}\n<i>[видео — превью]</i>",
+                    reply_markup=kb,
+                    raise_on_failure=True,
+                )
                 return True
-        await sender.send(f"{header_text}\n<i>[видео]</i>", reply_markup=kb)
+        await sender.send_text(target_chat_id, f"{header_text}\n<i>[видео]</i>", reply_markup=kb, raise_on_failure=True)
         return True
 
     if atype == "FILE":
@@ -87,14 +100,40 @@ async def _send_attach(
             if data:
                 kind = _guess_media_kind(name)
                 if kind == "photo":
-                    await sender.send_photo(data, caption=header_text, filename=name, reply_markup=kb)
+                    await sender.send_photo(
+                        target_chat_id,
+                        data,
+                        caption=header_text,
+                        filename=name,
+                        reply_markup=kb,
+                        raise_on_failure=True,
+                    )
                 elif kind == "video":
-                    await sender.send_video(data, caption=header_text, filename=name, reply_markup=kb)
+                    await sender.send_video(
+                        target_chat_id,
+                        data,
+                        caption=header_text,
+                        filename=name,
+                        reply_markup=kb,
+                        raise_on_failure=True,
+                    )
                 else:
-                    await sender.send_document(data, caption=header_text, filename=name, reply_markup=kb)
+                    await sender.send_document(
+                        target_chat_id,
+                        data,
+                        caption=header_text,
+                        filename=name,
+                        reply_markup=kb,
+                        raise_on_failure=True,
+                    )
                 return True
         size_str = f" ({_human_size(size)})" if size else ""
-        await sender.send(f"{header_text}\n📎 <b>{escape(name)}</b>{size_str}", reply_markup=kb)
+        await sender.send_text(
+            target_chat_id,
+            f"{header_text}\n📎 <b>{escape(name)}</b>{size_str}",
+            reply_markup=kb,
+            raise_on_failure=True,
+        )
         return True
 
     if atype == "AUDIO":
@@ -102,9 +141,9 @@ async def _send_attach(
         if url:
             data = await client.download_file(url)
             if data:
-                await sender.send_voice(data, caption=header_text, reply_markup=kb)
+                await sender.send_voice(target_chat_id, data, caption=header_text, reply_markup=kb, raise_on_failure=True)
                 return True
-        await sender.send(f"{header_text}\n<i>[аудио]</i>", reply_markup=kb)
+        await sender.send_text(target_chat_id, f"{header_text}\n<i>[аудио]</i>", reply_markup=kb, raise_on_failure=True)
         return True
 
     if atype == "STICKER":
@@ -112,9 +151,9 @@ async def _send_attach(
         if url:
             data = await client.download_file(url)
             if data:
-                await sender.send_sticker(data, reply_markup=kb)
+                await sender.send_sticker(target_chat_id, data, reply_markup=kb, raise_on_failure=True)
                 return True
-        await sender.send(f"{header_text}\n<i>[стикер]</i>", reply_markup=kb)
+        await sender.send_text(target_chat_id, f"{header_text}\n<i>[стикер]</i>", reply_markup=kb, raise_on_failure=True)
         return True
 
     if atype == "SHARE":
@@ -128,16 +167,16 @@ async def _send_attach(
             parts.append(escape(share_url))
         if desc:
             parts.append(f"<i>{escape(desc[:200])}</i>")
-        await sender.send("\n".join(parts), reply_markup=kb)
+        await sender.send_text(target_chat_id, "\n".join(parts), reply_markup=kb, raise_on_failure=True)
         return True
 
     if atype == "LOCATION":
         lat = attach.get("lat") or attach.get("latitude")
         lon = attach.get("lon") or attach.get("lng") or attach.get("longitude")
         if lat and lon:
-            await sender.send(f"{header_text}\n📍 {lat}, {lon}", reply_markup=kb)
+            await sender.send_text(target_chat_id, f"{header_text}\n📍 {lat}, {lon}", reply_markup=kb, raise_on_failure=True)
         else:
-            await sender.send(f"{header_text}\n<i>[геолокация]</i>", reply_markup=kb)
+            await sender.send_text(target_chat_id, f"{header_text}\n<i>[геолокация]</i>", reply_markup=kb, raise_on_failure=True)
         return True
 
     if atype == "CONTACT":
@@ -146,11 +185,16 @@ async def _send_attach(
         text = f"{header_text}\n👤 {escape(name)}"
         if phone:
             text += f" — {escape(phone)}"
-        await sender.send(text, reply_markup=kb)
+        await sender.send_text(target_chat_id, text, reply_markup=kb, raise_on_failure=True)
         return True
 
     log.info("Unknown attach type %s, sending as info", atype)
-    await sender.send(f"{header_text}\n<i>[вложение: {escape(atype or 'unknown')}]</i>", reply_markup=kb)
+    await sender.send_text(
+        target_chat_id,
+        f"{header_text}\n<i>[вложение: {escape(atype or 'unknown')}]</i>",
+        reply_markup=kb,
+        raise_on_failure=True,
+    )
     return True
 
 
@@ -160,6 +204,7 @@ async def _handle_linked_message(
     header_text: str,
     client: MaxClient,
     sender: TelegramSender,
+    target_chat_id: int,
     resolver: ContactResolver,
     kb=None,
 ) -> None:
@@ -197,14 +242,14 @@ async def _handle_linked_message(
                 text_sent = True
             else:
                 cap = full_header
-            await _send_attach(attach, client, sender, cap, kb=kb)
+            await _send_attach(attach, client, sender, target_chat_id, cap, kb=kb)
 
         if fwd_text and not text_sent:
-            await sender.send(f"{full_header}\n{escape(fwd_text)}", reply_markup=kb)
+            await sender.send_text(target_chat_id, f"{full_header}\n{escape(fwd_text)}", reply_markup=kb, raise_on_failure=True)
     elif fwd_text:
-        await sender.send(f"{full_header}\n{escape(fwd_text)}", reply_markup=kb)
+        await sender.send_text(target_chat_id, f"{full_header}\n{escape(fwd_text)}", reply_markup=kb, raise_on_failure=True)
     else:
-        await sender.send(f"{full_header}\n<i>[без содержимого]</i>", reply_markup=kb)
+        await sender.send_text(target_chat_id, f"{full_header}\n<i>[без содержимого]</i>", reply_markup=kb, raise_on_failure=True)
 
 
 def _human_size(n: int) -> str:
@@ -216,7 +261,7 @@ def _human_size(n: int) -> str:
 
 
 def create_max_client(
-    max_token: str, max_device_id: str, sender: TelegramSender, max_chat_ids: str | None = None,
+    max_token: str, max_device_id: str, sender: TelegramSender, router: ChatRouter, max_chat_ids: str | None = None,
     max_exclude_chat_ids: str | None = None, debug: bool = False, reply_enabled: bool = False,
 ) -> MaxClient:
     client = MaxClient(
@@ -232,63 +277,17 @@ def create_max_client(
     _notif_count = 0
     _last_notif_time: datetime | None = None
 
-    def _can_notify() -> bool:
-        if _last_notif_time is None:
-            return True
-        elapsed = (datetime.now() - _last_notif_time).total_seconds()
-        if _notif_count == 1:
-            return elapsed >= 3600    # 2-е: через 1 час
-        if _notif_count == 2:
-            return elapsed >= 10800   # 3-е: через 3 часа
-        return elapsed >= 86400       # 4-е и далее: раз в сутки
-
-    @client.on_ready
-    async def handle_ready(snapshot: dict):
-        nonlocal _first_connect
-        participant_ids = resolver.load_snapshot(snapshot)
-
-        if participant_ids:
-            log.info("Batch-resolving %d participants...", len(participant_ids))
-            await resolver.resolve_users_batch(participant_ids)
-            log.info("Resolved users: %s", resolver.users)
-
-            log.info("Known chats: %s", resolver.chats)
-            log.info("Known users: %s", resolver.users)
-
-        if not _first_connect:
-            await sender.send("✅ <b>Max:</b> соединение восстановлено")
-        else:
-            chat_count = len(resolver.chats)
-            await sender.send(f"✅ <b>Max:</b> подключён | чатов: {chat_count}")
-        _first_connect = False
-
-    @client.on_disconnect
-    async def handle_disconnect():
-        nonlocal _notif_count, _last_notif_time
-        if not _can_notify():
-            log.info("Disconnect notification suppressed (throttle)")
-            return
-        _notif_count += 1
-        _last_notif_time = datetime.now()
-        await sender.send("⚠️ <b>Max:</b> соединение потеряно, переподключение...")
-
-    @client.on_message
-    async def handle_message(msg: MaxMessage):
-        log.info(
-            "New message: chat=%s sender=%s is_self=%s text=%r attaches=%d",
-            msg.chat_id,
-            msg.sender_id,
-            msg.is_self,
-            (msg.text[:80] + "…") if len(msg.text) > 80 else msg.text,
-            len(msg.attaches),
-        )
-
-        if msg.is_self:
+    async def _deliver_payload(target_chat_id: int, raw_payload: dict, binding: dict) -> None:
+        msg = client._parse_message(raw_payload)
+        if msg is None or msg.is_self:
             return
 
         sender_label = escape(await resolver.resolve_user(msg.sender_id))
         is_dm = resolver.is_dm(msg.chat_id)
-        chat_label = escape(resolver.chat_name(msg.chat_id))
+        chat_name = resolver.chat_name(msg.chat_id)
+        if chat_name == str(msg.chat_id):
+            chat_name = binding.get("max_chat_title") or chat_name
+        chat_label = escape(chat_name)
         header_text = _header(msg, sender_label, chat_label, is_dm)
         kb = reply_keyboard(msg.chat_id, msg.message_id) if reply_enabled else None
 
@@ -296,10 +295,24 @@ def create_max_client(
         link_type = link.get("type") if isinstance(link, dict) else None
 
         if link_type in ("FORWARD", "REPLY"):
-            await _handle_linked_message(link, link_type, header_text, client, sender, resolver, kb=kb)
+            await _handle_linked_message(
+                link,
+                link_type,
+                header_text,
+                client,
+                sender,
+                target_chat_id,
+                resolver,
+                kb=kb,
+            )
             if msg.text:
-                await sender.send(f"{header_text}\n{escape(msg.text)}", reply_markup=kb)
-            log.info("Forwarded link type=%s → TG", link_type)
+                await sender.send_text(
+                    target_chat_id,
+                    f"{header_text}\n{escape(msg.text)}",
+                    reply_markup=kb,
+                    raise_on_failure=True,
+                )
+            log.info("Forwarded link type=%s → TG chat=%s", link_type, target_chat_id)
             return
 
         meaningful_attaches = [
@@ -315,14 +328,99 @@ def create_max_client(
                     text_sent = True
                 else:
                     cap = header_text
-                await _send_attach(attach, client, sender, cap, kb=kb)
-                log.info("Forwarded attach _type=%s → TG", attach.get("_type"))
+                await _send_attach(attach, client, sender, target_chat_id, cap, kb=kb)
+                log.info("Forwarded attach _type=%s → TG chat=%s", attach.get("_type"), target_chat_id)
 
             if msg.text and not text_sent:
-                await sender.send(f"{header_text}\n{escape(msg.text)}", reply_markup=kb)
+                await sender.send_text(
+                    target_chat_id,
+                    f"{header_text}\n{escape(msg.text)}",
+                    reply_markup=kb,
+                    raise_on_failure=True,
+                )
         else:
             body = escape(msg.text) if msg.text else "<i>[нетекстовое сообщение]</i>"
-            await sender.send(f"{header_text}\n{body}", reply_markup=kb)
-            log.info("Forwarded text → TG")
+            await sender.send_text(
+                target_chat_id,
+                f"{header_text}\n{body}",
+                reply_markup=kb,
+                raise_on_failure=True,
+            )
+            log.info("Forwarded text → TG chat=%s", target_chat_id)
+
+    router.set_delivery_callback(_deliver_payload)
+
+    def _can_notify() -> bool:
+        if _last_notif_time is None:
+            return True
+        elapsed = (datetime.now() - _last_notif_time).total_seconds()
+        if _notif_count == 1:
+            return elapsed >= 3600    # 2-е: через 1 час
+        if _notif_count == 2:
+            return elapsed >= 10800   # 3-е: через 3 часа
+        return elapsed >= 86400       # 4-е и далее: раз в сутки
+
+    @client.on_ready
+    async def handle_ready(snapshot: dict):
+        nonlocal _first_connect
+        participant_ids = resolver.load_snapshot(snapshot)
+        await router.sync_snapshot(snapshot)
+
+        if participant_ids:
+            log.info("Batch-resolving %d participants...", len(participant_ids))
+            await resolver.resolve_users_batch(participant_ids)
+            log.info("Resolved users: %s", resolver.users)
+
+            log.info("Known chats: %s", resolver.chats)
+            log.info("Known users: %s", resolver.users)
+
+        for chat_id, chat_title in resolver.chats.items():
+            router.store.ensure_chat(chat_id, chat_title, resolver.chat_types.get(chat_id))
+
+        if not _first_connect:
+            await router.notify_reconnected()
+        else:
+            chat_count = len(resolver.chats)
+            await router.notify_connected(chat_count)
+            await router.maybe_notify_unconfigured_summary()
+        _first_connect = False
+
+        for binding in router.list_chats():
+            if binding.get("state") == "pending_bot":
+                await router.flush_pending_chat(binding["max_chat_id"])
+
+    @client.on_disconnect
+    async def handle_disconnect():
+        nonlocal _notif_count, _last_notif_time
+        if not _can_notify():
+            log.info("Disconnect notification suppressed (throttle)")
+            return
+        _notif_count += 1
+        _last_notif_time = datetime.now()
+        await router.notify_disconnected()
+
+    @client.on_message
+    async def handle_message(msg: MaxMessage):
+        log.info(
+            "New message: chat=%s sender=%s is_self=%s text=%r attaches=%d",
+            msg.chat_id,
+            msg.sender_id,
+            msg.is_self,
+            (msg.text[:80] + "…") if len(msg.text) > 80 else msg.text,
+            len(msg.attaches),
+        )
+
+        if msg.is_self:
+            return
+
+        chat_title = resolver.chat_name(msg.chat_id)
+        if resolver.is_dm(msg.chat_id) and chat_title.startswith("DM:"):
+            chat_title = await resolver.resolve_user(msg.sender_id)
+        await router.route_payload(
+            msg.chat_id,
+            msg.raw,
+            chat_title,
+            resolver.chat_types.get(msg.chat_id),
+        )
 
     return client

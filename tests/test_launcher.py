@@ -16,7 +16,7 @@ MAX_TOKEN=token-1
 MAX_DEVICE_ID=device-1
 
 TG_BOT_TOKEN=bot-token
-TG_CHAT_ID=123456
+TG_ADMIN_ID=123456
 """
 
     values = parse_env_text(text)
@@ -25,7 +25,7 @@ TG_CHAT_ID=123456
         "MAX_TOKEN": "token-1",
         "MAX_DEVICE_ID": "device-1",
         "TG_BOT_TOKEN": "bot-token",
-        "TG_CHAT_ID": "123456",
+        "TG_ADMIN_ID": "123456",
     }
 
 
@@ -34,14 +34,14 @@ def test_render_env_text_updates_existing_values_and_preserves_other_lines():
         "# header\n"
         "MAX_TOKEN=old-token\n"
         "DEBUG=false\n"
-        "TG_CHAT_ID=111\n"
+        "TG_ADMIN_ID=111\n"
     )
 
     rendered = render_env_text(
         base_text,
         {
             "MAX_TOKEN": "new-token",
-            "TG_CHAT_ID": "222",
+            "TG_ADMIN_ID": "222",
         },
     )
 
@@ -49,7 +49,7 @@ def test_render_env_text_updates_existing_values_and_preserves_other_lines():
         "# header\n"
         "MAX_TOKEN=new-token\n"
         "DEBUG=false\n"
-        "TG_CHAT_ID=222\n"
+        "TG_ADMIN_ID=222\n"
     )
 
 
@@ -78,26 +78,26 @@ def test_validate_required_credentials_accepts_valid_values():
         "MAX_TOKEN": "token",
         "MAX_DEVICE_ID": "device",
         "TG_BOT_TOKEN": "bot",
-        "TG_CHAT_ID": "-100123456",
+        "TG_ADMIN_ID": "123456789",
     }
 
     validate_required_credentials(values)
 
 
-def test_validate_required_credentials_rejects_invalid_chat_id():
+def test_validate_required_credentials_rejects_invalid_admin_id():
     values = {
         "MAX_TOKEN": "token",
         "MAX_DEVICE_ID": "device",
         "TG_BOT_TOKEN": "bot",
-        "TG_CHAT_ID": "chat-id",
+        "TG_ADMIN_ID": "chat-id",
     }
 
     try:
         validate_required_credentials(values)
     except ValueError as exc:
-        assert "TG_CHAT_ID" in str(exc)
+        assert "TG_ADMIN_ID" in str(exc)
     else:
-        raise AssertionError("Expected ValueError for invalid TG_CHAT_ID")
+        raise AssertionError("Expected ValueError for invalid TG_ADMIN_ID")
 
 
 def test_stop_bot_without_state_file_is_idempotent():

@@ -11,7 +11,7 @@ class Settings:
     max_token: str
     max_device_id: str
     tg_bot_token: str
-    tg_chat_id: str
+    tg_admin_id: int
     max_chat_ids: str | None = None
     max_exclude_chat_ids: str | None = None
     tg_proxy: str | None = None
@@ -48,7 +48,7 @@ def _extract_max_token(raw_value: str) -> str:
 def load_settings() -> Settings:
     load_dotenv(override=True)
 
-    required = ["MAX_TOKEN", "MAX_DEVICE_ID", "TG_BOT_TOKEN", "TG_CHAT_ID"]
+    required = ["MAX_TOKEN", "MAX_DEVICE_ID", "TG_BOT_TOKEN", "TG_ADMIN_ID"]
     missing = [k for k in required if not os.environ.get(k)]
     if missing:
         raise SystemExit(
@@ -56,19 +56,19 @@ def load_settings() -> Settings:
             "Copy .env.example to .env and fill in the values."
         )
 
-    tg_chat_id = os.environ["TG_CHAT_ID"]
+    tg_admin_id = os.environ["TG_ADMIN_ID"]
     try:
-        int(tg_chat_id)
+        parsed_admin_id = int(tg_admin_id)
     except ValueError:
         raise SystemExit(
-            f"TG_CHAT_ID must be a valid integer, got: {tg_chat_id!r}"
+            f"TG_ADMIN_ID must be a valid integer, got: {tg_admin_id!r}"
         )
 
     return Settings(
         max_token=_extract_max_token(os.environ["MAX_TOKEN"]),
         max_device_id=os.environ["MAX_DEVICE_ID"],
         tg_bot_token=os.environ["TG_BOT_TOKEN"],
-        tg_chat_id=os.environ["TG_CHAT_ID"],
+        tg_admin_id=parsed_admin_id,
         max_chat_ids=os.environ.get("MAX_CHAT_IDS") or None,
         max_exclude_chat_ids=os.environ.get("MAX_EXCLUDE_CHAT_IDS") or None,
         tg_proxy=os.environ.get("TG_PROXY") or None,

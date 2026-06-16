@@ -49,11 +49,11 @@
 
 > **Важно:** не делитесь этими значениями — они дают полный доступ к вашему аккаунту Max.
 
-### Telegram: токен бота и chat ID
+### Telegram: токен бота и user ID владельца
 
 1. Напишите [@BotFather](https://t.me/BotFather) в Telegram → `/newbot` → следуйте инструкциям
 2. Скопируйте полученный токен → это ваш `TG_BOT_TOKEN`
-3. Узнайте свой chat ID: напишите [@userinfobot](https://t.me/userinfobot) → он ответит вашим ID → это `TG_CHAT_ID`
+3. Узнайте свой user ID: напишите [@userinfobot](https://t.me/userinfobot) → он ответит вашим ID → это `TG_ADMIN_ID`
 4. **Важно:** напишите вашему боту `/start`, чтобы он мог вам отправлять сообщения
 
 ## Настройка
@@ -73,11 +73,13 @@ cp .env.example .env
 | `MAX_CHAT_IDS`  | нет          | список ID чатов Max, разделенных запятой       |
 | `MAX_EXCLUDE_CHAT_IDS` | нет    | список ID чатов Max, которые нужно исключить   |
 | `TG_BOT_TOKEN`  | да           | Токен Telegram-бота                            |
-| `TG_CHAT_ID`    | да           | ID чата, куда пересылать сообщения             |
+| `TG_ADMIN_ID`   | да           | Telegram user ID владельца бота                |
 | `DEBUG`         | нет          | `true` — подробные логи + дамп JSON в `debug/` |
 | `REPLY_ENABLED` | нет          | `true` — разрешить ответы из Telegram в Max    |
 | `LOG_DIR`       | нет          | Путь к директории логов (по умолчанию `logs`)  |
 | `TG_PROXY`      | нет          | SOCKS5-прокси для Telegram (`socks5://host:port`) |
+
+После запуска бот пишет владельцу в личку, показывает кнопку `Настроить чаты` и позволяет привязать каждый чат MAX к отдельной Telegram-группе. Привязки и очередь недоставленных сообщений сохраняются локально в `data/chat_bindings.json`.
 
 ## Запуск
 
@@ -128,7 +130,7 @@ cd max2tg
 ```
 
 Что делает скрипт:
-- при первом запуске спрашивает `MAX_TOKEN`, `MAX_DEVICE_ID`, `TG_BOT_TOKEN`, `TG_CHAT_ID` и записывает их в `.env`
+- при первом запуске спрашивает `MAX_TOKEN`, `MAX_DEVICE_ID`, `TG_BOT_TOKEN` и `TG_ADMIN_ID`, затем записывает их в `.env`
 - при следующем запуске предлагает либо оставить текущие креды, либо ввести новые
 - создаёт `.venv`, ставит зависимости из `requirements.txt` и запускает бота в фоне
 
@@ -220,14 +222,16 @@ sudo journalctl -u max2tg -f
 ## Как это работает
 
 ```
-Max (WebSocket) ──→ max2tg ──→ [SOCKS5 proxy] ──→ Telegram Bot ──→ Ваш чат
-                       ↑                                              │
+Max (WebSocket) ──→ max2tg ──→ [SOCKS5 proxy] ──→ Telegram Bot ──→ Личка владельца
+                       │                                              │
+                       ├──────────────────────────────────────────────→ Отдельные Telegram-группы
                        └────────── (если REPLY_ENABLED) ──────────────┘
 ```
 
 1. Приложение подключается к Max через WebSocket как ваш аккаунт
-2. Новые входящие сообщения пересылаются в указанный Telegram-чат
-3. Если `REPLY_ENABLED=true`, под каждым сообщением появляется кнопка «Ответить» — нажав её, можно написать текст, который отправится обратно в соответствующий чат Max
+2. Технические сообщения приходят владельцу в личку, а каждый чат MAX можно привязать к отдельной Telegram-группе
+3. Если бот ещё не добавлен в выбранную группу, сообщения копятся локально и дозаливаются после появления доступа
+4. Если `REPLY_ENABLED=true`, под каждым рабочим сообщением появляется кнопка «Ответить» — ответить обратно в Max может только владелец
 
 ## Структура проекта
 
@@ -319,11 +323,11 @@ Real-time message forwarding from **Max** messenger (max.ru) to **Telegram** —
 
 > **Important:** do not share these values — they grant full access to your Max account.
 
-### Telegram: bot token and chat ID
+### Telegram: bot token and owner user ID
 
 1. Message [@BotFather](https://t.me/BotFather) on Telegram → `/newbot` → follow the instructions
 2. Copy the token → this is your `TG_BOT_TOKEN`
-3. Get your chat ID: message [@userinfobot](https://t.me/userinfobot) → it replies with your ID → this is `TG_CHAT_ID`
+3. Get your user ID: message [@userinfobot](https://t.me/userinfobot) → it replies with your ID → this is `TG_ADMIN_ID`
 4. **Important:** send `/start` to your bot so it can message you
 
 ## Configuration
@@ -342,11 +346,13 @@ cp .env.example .env
 | `MAX_DEVICE_ID` | yes | Max device ID |
 | `MAX_CHAT_IDS` | no | Comma-separated list of Max chat IDs to listen to (all chats if unset) |
 | `TG_BOT_TOKEN` | yes | Telegram bot token |
-| `TG_CHAT_ID` | yes | Chat ID to forward messages to |
+| `TG_ADMIN_ID` | yes | Telegram user ID of the bot owner |
 | `DEBUG` | no | `true` — verbose logs + JSON dumps to `debug/` |
 | `REPLY_ENABLED` | no | `true` — enable replies from Telegram to Max |
 | `LOG_DIR` | no | Log directory path (default: `logs`) |
 | `TG_PROXY` | no | SOCKS5 proxy for Telegram (`socks5://host:port`) |
+
+After startup, the bot writes to the owner's private chat, shows a `Configure chats` button, and lets you bind each Max chat to a separate Telegram group. Bindings and the backlog queue are stored locally in `data/chat_bindings.json`.
 
 ## Running
 
@@ -397,7 +403,7 @@ cd max2tg
 ```
 
 What the script does:
-- on the first run, asks for `MAX_TOKEN`, `MAX_DEVICE_ID`, `TG_BOT_TOKEN`, and `TG_CHAT_ID`, then writes them to `.env`
+- on the first run, asks for `MAX_TOKEN`, `MAX_DEVICE_ID`, `TG_BOT_TOKEN`, and `TG_ADMIN_ID`, then writes them to `.env`
 - on later runs, offers either to keep the current credentials or enter new ones
 - creates `.venv`, installs dependencies from `requirements.txt`, and starts the bot in the background
 
@@ -489,14 +495,16 @@ sudo journalctl -u max2tg -f
 ## How It Works
 
 ```
-Max (WebSocket) ──→ max2tg ──→ [SOCKS5 proxy] ──→ Telegram Bot ──→ Your chat
-                       ↑                                              │
+Max (WebSocket) ──→ max2tg ──→ [SOCKS5 proxy] ──→ Telegram Bot ──→ Owner DM
+                       │                                              │
+                       ├──────────────────────────────────────────────→ Separate Telegram groups
                        └────────── (if REPLY_ENABLED) ────────────────┘
 ```
 
 1. The app connects to Max via WebSocket using your account credentials
-2. Incoming messages are forwarded to the specified Telegram chat
-3. If `REPLY_ENABLED=true`, each message includes a "Reply" button — press it, type your response, and it gets sent back to the corresponding Max chat
+2. Technical messages go to the owner's DM, and each Max chat can be bound to its own Telegram group
+3. If the bot is not yet in the selected group, incoming Max messages are queued locally and replayed after access appears
+4. If `REPLY_ENABLED=true`, each forwarded work message includes a reply flow back to the matching Max chat, but only the owner can use it
 
 ## Project Structure
 

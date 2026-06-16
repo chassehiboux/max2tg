@@ -42,6 +42,7 @@ class ContactResolver:
         await self._ws_fetch_contacts([user_id])
 
         if user_id in self.users:
+            self._refresh_dialog_labels()
             return self.users[user_id]
         self._fetch_failed.add(user_id)
         return str(user_id)
@@ -74,6 +75,7 @@ class ContactResolver:
                 await asyncio.gather(*pending, return_exceptions=True)
         finally:
             await asyncio.gather(*tasks, return_exceptions=True)
+        self._refresh_dialog_labels()
 
     # ── populate from AUTH_SNAPSHOT ────────────────────────────────
 
@@ -157,6 +159,7 @@ class ContactResolver:
             if uid is not None and name:
                 self.users[uid] = name
                 log.info("Resolved contact %s → %s", uid, name)
+        self._refresh_dialog_labels()
 
         # Maybe the response IS the contact (single user)
         if not contacts and resp.get("id"):
@@ -165,6 +168,7 @@ class ContactResolver:
             if uid and name:
                 self.users[uid] = name
                 log.info("Resolved contact %s → %s", uid, name)
+        self._refresh_dialog_labels()
 
         # Walk the entire response for any name-bearing objects
         self._deep_extract(resp, depth=0)
@@ -178,11 +182,24 @@ class ContactResolver:
             if uid is not None and name and uid not in self.users:
                 self.users[uid] = name
                 log.info("Deep-resolved contact %s → %s", uid, name)
+                self._refresh_dialog_labels()
             for v in obj.values():
                 self._deep_extract(v, depth + 1)
         elif isinstance(obj, list):
             for item in obj:
                 self._deep_extract(item, depth + 1)
+
+    def _refresh_dialog_labels(self) -> None:
+        for chat_id, label in list(self.chats.items()):
+            if not isinstance(label, str) or not label.startswith("DM:"):
+                continue
+            peer_raw = label[3:]
+            if not peer_raw.lstrip("-").isdigit():
+                continue
+            peer_id = int(peer_raw)
+            resolved = self.users.get(peer_id)
+            if resolved:
+                self.chats[chat_id] = resolved
 
     @staticmethod
     def _extract_name_from_contact(c: dict) -> str:

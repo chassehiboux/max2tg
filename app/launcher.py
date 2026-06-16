@@ -11,7 +11,7 @@ REQUIRED_CREDENTIAL_KEYS = (
     "MAX_TOKEN",
     "MAX_DEVICE_ID",
     "TG_BOT_TOKEN",
-    "TG_CHAT_ID",
+    "TG_ADMIN_ID",
 )
 
 STATE_FILE_NAME = ".max2tg-runner.json"
@@ -65,11 +65,11 @@ def validate_required_credentials(values: dict[str, str]) -> None:
             "В .env не заполнены обязательные значения: " + ", ".join(missing)
         )
 
-    tg_chat_id = values["TG_CHAT_ID"]
+    tg_admin_id = values["TG_ADMIN_ID"]
     try:
-        int(tg_chat_id)
+        int(tg_admin_id)
     except ValueError as exc:
-        raise ValueError("TG_CHAT_ID должен быть целым числом.") from exc
+        raise ValueError("TG_ADMIN_ID должен быть целым числом.") from exc
 
 
 def ask_yes_no(prompt: str, default: bool) -> bool:
@@ -109,7 +109,7 @@ def prompt_required_credentials() -> dict[str, str]:
         ("MAX_TOKEN", "MAX_TOKEN (__oneme_auth из web.max.ru)"),
         ("MAX_DEVICE_ID", "MAX_DEVICE_ID (__oneme_device_id из web.max.ru)"),
         ("TG_BOT_TOKEN", "TG_BOT_TOKEN (токен от @BotFather)"),
-        ("TG_CHAT_ID", "TG_CHAT_ID (ваш chat id в Telegram)"),
+        ("TG_ADMIN_ID", "TG_ADMIN_ID (ваш user id в Telegram)"),
     )
 
     print("Введите обязательные креды для Max и Telegram.")
@@ -120,11 +120,11 @@ def prompt_required_credentials() -> dict[str, str]:
             if not value:
                 print("Значение не может быть пустым.")
                 continue
-            if key == "TG_CHAT_ID":
+            if key == "TG_ADMIN_ID":
                 try:
                     int(value)
                 except ValueError:
-                    print("TG_CHAT_ID должен быть целым числом.")
+                    print("TG_ADMIN_ID должен быть целым числом.")
                     continue
             values[key] = value
             break

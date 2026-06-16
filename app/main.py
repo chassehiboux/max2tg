@@ -5,9 +5,12 @@ import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 from telegram import Update
 
+from app.chat_bindings import ChatBindingsStore
+from app.chat_router import ChatRouter
 from app.config import load_settings
 from app.max_listener import create_max_client
 from app.tg_handler import build_tg_app
@@ -70,38 +73,48 @@ async def main():
     if settings.tg_proxy:
         log.info("Using Telegram proxy: %s", settings.tg_proxy.split("@")[-1])
 
-    sender = TelegramSender(settings.tg_bot_token, settings.tg_chat_id, proxy_url=settings.tg_proxy)
+    data_dir = Path(os.environ.get("DATA_DIR", "data"))
+    store = ChatBindingsStore(data_dir / "chat_bindings.json")
+
+    sender = TelegramSender(settings.tg_bot_token, settings.tg_admin_id, proxy_url=settings.tg_proxy)
     await sender.start()
+    router = ChatRouter(sender, store, settings.tg_admin_id, reply_enabled=settings.reply_enabled)
+    await router.start()
 
     client = create_max_client(
-        settings.max_token, settings.max_device_id, sender, settings.max_chat_ids,
+        settings.max_token, settings.max_device_id, sender, router, settings.max_chat_ids,
         settings.max_exclude_chat_ids,
         debug=settings.debug, reply_enabled=settings.reply_enabled,
     )
 
-    tg_app = None
+    tg_app = build_tg_app(
+        settings.tg_bot_token,
+        client,
+        router,
+        settings.tg_admin_id,
+        reply_enabled=settings.reply_enabled,
+        proxy_url=settings.tg_proxy,
+    )
+    await tg_app.initialize()
+    await tg_app.start()
+    await tg_app.updater.start_polling(
+        drop_pending_updates=True,
+        allowed_updates=Update.ALL_TYPES,
+    )
     if settings.reply_enabled:
-        tg_app = build_tg_app(settings.tg_bot_token, client, settings.tg_chat_id,
-                              proxy_url=settings.tg_proxy)
-        await tg_app.initialize()
-        await tg_app.start()
-        await tg_app.updater.start_polling(
-            drop_pending_updates=True,
-            allowed_updates=Update.ALL_TYPES,
-        )
-        log.info("Telegram polling started (reply → Max enabled)")
+        log.info("Telegram polling started (admin UI + reply → Max enabled)")
     else:
-        log.info("Reply to Max disabled (REPLY_ENABLED=false)")
+        log.info("Telegram polling started (admin UI enabled, reply → Max disabled)")
 
     log.info("Starting Max listener...")
     try:
         await client.run()
     finally:
         log.info("Shutting down...")
-        if tg_app:
-            await tg_app.updater.stop()
-            await tg_app.stop()
-            await tg_app.shutdown()
+        await tg_app.updater.stop()
+        await tg_app.stop()
+        await tg_app.shutdown()
+        await router.stop()
         await sender.stop()
 
 
