@@ -137,6 +137,23 @@ class TestLoadSnapshot:
         resolver.load_snapshot(snapshot)
         assert resolver.chats[99] == "DM:55"
 
+    def test_dm_without_title_uses_embedded_participant_name(self):
+        resolver = self._make_resolver()
+        snapshot = {
+            "profile": {"id": 1},
+            "chats": [{
+                "id": 99,
+                "type": "DIALOG",
+                "participants": {
+                    "1": {},
+                    "55": {"firstName": "Анна", "lastName": "Безверхая"},
+                },
+            }],
+        }
+        resolver.load_snapshot(snapshot)
+        assert resolver.users[55] == "Анна Безверхая"
+        assert resolver.chats[99] == "Анна Безверхая"
+
     def test_dm_with_explicit_title_keeps_title(self):
         resolver = self._make_resolver()
         snapshot = {
@@ -340,3 +357,24 @@ class TestResolveUser:
         result = await resolver.resolve_user(77)
         assert result == "Fetched User"
         assert 77 not in resolver._fetch_failed
+
+
+class TestResolveUsersBatch:
+    @pytest.mark.asyncio
+    async def test_fetches_unknown_users_with_single_id_requests(self):
+        resolver = ContactResolver()
+        calls = []
+
+        async def fake_fetch(ids):
+            calls.append(tuple(ids))
+            resolver.users[ids[0]] = f"User {ids[0]}"
+
+        resolver._ws_fetch_contacts = fake_fetch
+
+        await resolver.resolve_users_batch([10, 11, 10, 12])
+
+        assert set(calls) == {(10,), (11,), (12,)}
+        assert all(len(call) == 1 for call in calls)
+        assert resolver.users[10] == "User 10"
+        assert resolver.users[11] == "User 11"
+        assert resolver.users[12] == "User 12"
