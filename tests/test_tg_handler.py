@@ -88,6 +88,7 @@ def _make_message_update(text: str, chat_type: str = "private", user_name: str =
     update.message.from_user = MagicMock()
     update.message.from_user.full_name = user_name
     update.message.reply_text = AsyncMock()
+    update.message.delete = AsyncMock()
     return update
 
 
@@ -326,6 +327,7 @@ class TestOnTextReply:
         assert kwargs["parse_mode"] == "HTML"
         assert "📩 Alice\nHi" in kwargs["text"]
         prompt.delete.assert_called_once()
+        update.message.delete.assert_called_once()
         update.message.reply_text.assert_not_called()
 
     @pytest.mark.asyncio
@@ -350,6 +352,7 @@ class TestOnTextReply:
         kwargs = source_message.edit_caption.call_args.kwargs
         assert kwargs["parse_mode"] == "HTML"
         assert "📩 Alice\nОтвет" in kwargs["caption"]
+        update.message.delete.assert_called_once()
         update.message.reply_text.assert_not_called()
 
     @pytest.mark.asyncio
@@ -364,6 +367,7 @@ class TestOnTextReply:
         await _on_text_reply(update, ctx)
 
         prompt.delete.assert_called_once()
+        update.message.delete.assert_not_called()
         update.message.reply_text.assert_called_once()
         args = update.message.reply_text.call_args[0][0]
         assert "⚠️" in args
@@ -383,6 +387,7 @@ class TestOnTextReply:
         await _on_text_reply(update, ctx)
 
         prompt.delete.assert_called_once()
+        update.message.delete.assert_not_called()
         args = update.message.reply_text.call_args[0][0]
         assert "⚠️" in args
 
@@ -401,6 +406,7 @@ class TestOnTextReply:
         await _on_text_reply(update, ctx)
 
         prompt.delete.assert_called_once()
+        update.message.delete.assert_not_called()
         args = update.message.reply_text.call_args[0][0]
         assert "⚠️" in args
 
@@ -425,6 +431,7 @@ class TestOnTextReply:
 
         source_message.edit_text.assert_not_called()
         source_message.edit_caption.assert_not_called()
+        update.message.delete.assert_called_once()
         update.message.reply_text.assert_called_once()
         args = update.message.reply_text.call_args[0][0]
         assert '<b>evil</b>' not in args
@@ -449,6 +456,7 @@ class TestOnTextReply:
 
         await _on_text_reply(update, ctx)
 
+        update.message.delete.assert_called_once()
         update.message.reply_text.assert_called_once()
         args = update.message.reply_text.call_args[0][0]
         assert "✅" in args

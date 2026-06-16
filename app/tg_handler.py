@@ -162,6 +162,8 @@ async def _on_text_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             if not edited:
                 safe_target = html.escape(str(state["label"] or max_chat_id))
                 await update.message.reply_text(f"✅ Отправлено → <b>{safe_target}</b>", parse_mode=ParseMode.HTML)
+
+            await _delete_message_safe(update.message, "user reply")
         else:
             await update.message.reply_text("⚠️ Не удалось отправить сообщение в Max.")
     except Exception:
