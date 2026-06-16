@@ -126,7 +126,9 @@ docker-compose up -d --build
 git clone <repo-url> max2tg
 cd max2tg
 
-.\start_bot.ps1
+python .\launcher.py
+# или
+.\scripts\start_bot.ps1
 ```
 
 Что делает скрипт:
@@ -137,7 +139,7 @@ cd max2tg
 Остановка:
 
 ```powershell
-.\stop_bot.ps1
+.\scripts\stop_bot.ps1
 ```
 
 Логи процесса:
@@ -399,7 +401,9 @@ docker-compose up -d --build
 git clone <repo-url> max2tg
 cd max2tg
 
-.\start_bot.ps1
+python .\launcher.py
+# or
+.\scripts\start_bot.ps1
 ```
 
 What the script does:
@@ -410,7 +414,7 @@ What the script does:
 Stop:
 
 ```powershell
-.\stop_bot.ps1
+.\scripts\stop_bot.ps1
 ```
 
 Process logs:

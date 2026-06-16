@@ -87,7 +87,7 @@ class MaxClient:
     WS_URL = "wss://ws-api.oneme.ru/websocket"
     HEARTBEAT_SEC = 30
     RECONNECT_SEC = 5
-    AUTH_TIMEOUT_SEC = 15
+    AUTH_TIMEOUT_SEC = 10
 
     def __init__(
         self,
