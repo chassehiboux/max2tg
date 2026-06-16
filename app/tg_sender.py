@@ -14,10 +14,30 @@ TG_CAPTION_MAX = 1024
 MAX_RETRIES = 3
 
 
-def reply_keyboard(max_chat_id) -> InlineKeyboardMarkup:
+def _reply_callback_data(prefix: str, max_chat_id, max_message_id) -> str:
+    if max_message_id in (None, ""):
+        return f"{prefix}:{max_chat_id}"
+    return f"{prefix}:{max_chat_id}:{max_message_id}"
+
+
+def reply_keyboard(max_chat_id, max_message_id=None) -> InlineKeyboardMarkup:
     """Build an inline keyboard with a single 'Reply' button."""
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("💬 Ответить", callback_data=f"reply:{max_chat_id}")
+        InlineKeyboardButton("💬 Ответить", callback_data=_reply_callback_data("reply", max_chat_id, max_message_id))
+    ]])
+
+
+def reply_mode_keyboard(max_chat_id, max_message_id=None) -> InlineKeyboardMarkup:
+    """Build an inline keyboard to choose between plain message and reply mode."""
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            "📨 Сообщением",
+            callback_data=_reply_callback_data("reply_mode:message", max_chat_id, max_message_id),
+        ),
+        InlineKeyboardButton(
+            "↩️ Reply",
+            callback_data=_reply_callback_data("reply_mode:reply", max_chat_id, max_message_id),
+        ),
     ]])
 
 

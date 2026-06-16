@@ -6,14 +6,17 @@ from unittest.mock import AsyncMock, MagicMock
 from app.tg_handler import (
     PENDING_REPLY_KEY,
     PENDING_REPLY_LABEL_KEY,
+    PENDING_REPLY_MODE_KEY,
     PENDING_REPLY_PROMPT_CHAT_ID_KEY,
     PENDING_REPLY_PROMPT_MESSAGE_ID_KEY,
     PENDING_REPLY_SOURCE_CHAT_ID_KEY,
     PENDING_REPLY_SOURCE_HTML_KEY,
     PENDING_REPLY_SOURCE_KIND_KEY,
+    PENDING_REPLY_SOURCE_MAX_MESSAGE_ID_KEY,
     PENDING_REPLY_SOURCE_MESSAGE_ID_KEY,
     _on_cancel,
     _on_reply_button,
+    _on_reply_mode_button,
     _on_text_reply,
 )
 
@@ -52,6 +55,7 @@ def _make_source_message(
     message.chat_id = chat_id
     message.message_id = message_id
     message.reply_text = AsyncMock(return_value=_make_prompt_message(chat_id=chat_id))
+    message.edit_reply_markup = AsyncMock()
     return message
 
 
@@ -110,85 +114,73 @@ def _make_message_update(
 
 class TestOnReplyButton:
     @pytest.mark.asyncio
-    async def test_stores_pending_reply_chat_id(self):
-        query = _make_callback_query("reply:42")
+    async def test_shows_mode_keyboard(self):
+        query = _make_callback_query("reply:42:999")
         update = _make_update_with_query(query)
         ctx = _make_context(bot_data={"allowed_chat_id": -100})
 
         await _on_reply_button(update, ctx)
 
-        assert ctx.user_data[PENDING_REPLY_KEY] == 42
-
-    @pytest.mark.asyncio
-    async def test_stores_label_from_first_line(self):
-        query = _make_callback_query("reply:42", message_text="First line\nSecond line")
-        update = _make_update_with_query(query)
-        ctx = _make_context(bot_data={"allowed_chat_id": -100})
-
-        await _on_reply_button(update, ctx)
-
-        assert ctx.user_data[PENDING_REPLY_LABEL_KEY] == "First line"
-
-    @pytest.mark.asyncio
-    async def test_stores_source_and_prompt_metadata(self):
-        query = _make_callback_query(
-            "reply:42",
-            message_text="Hello",
-            text_html="<b>Hello</b>",
-            chat_id=-100,
-            message_id=321,
-        )
-        update = _make_update_with_query(query)
-        ctx = _make_context(bot_data={"allowed_chat_id": -100})
-
-        await _on_reply_button(update, ctx)
-
-        assert ctx.user_data[PENDING_REPLY_SOURCE_CHAT_ID_KEY] == -100
-        assert ctx.user_data[PENDING_REPLY_SOURCE_MESSAGE_ID_KEY] == 321
-        assert ctx.user_data[PENDING_REPLY_SOURCE_HTML_KEY] == "<b>Hello</b>"
-        assert ctx.user_data[PENDING_REPLY_SOURCE_KIND_KEY] == "text"
-        assert ctx.user_data[PENDING_REPLY_PROMPT_CHAT_ID_KEY] == -100
-        assert ctx.user_data[PENDING_REPLY_PROMPT_MESSAGE_ID_KEY] == 555
-
-    @pytest.mark.asyncio
-    async def test_ignores_non_reply_callback(self):
-        query = _make_callback_query("something_else")
-        update = _make_update_with_query(query)
-        ctx = _make_context(bot_data={"allowed_chat_id": -100})
-
-        await _on_reply_button(update, ctx)
-
-        assert PENDING_REPLY_KEY not in ctx.user_data
+        query.message.edit_reply_markup.assert_awaited_once()
+        markup = query.message.edit_reply_markup.call_args.kwargs["reply_markup"]
+        buttons = markup.inline_keyboard[0]
+        assert buttons[0].text == "📨 Сообщением"
+        assert buttons[0].callback_data == "reply_mode:message:42:999"
+        assert buttons[1].text == "↩️ Reply"
+        assert buttons[1].callback_data == "reply_mode:reply:42:999"
+        assert ctx.user_data == {}
 
     @pytest.mark.asyncio
     async def test_ignores_unauthorized_chat(self):
-        query = _make_callback_query("reply:42")
+        query = _make_callback_query("reply:42:999")
         update = _make_update_with_query(query, chat_id=9999)
         ctx = _make_context(bot_data={"allowed_chat_id": -100})
 
         await _on_reply_button(update, ctx)
 
-        assert PENDING_REPLY_KEY not in ctx.user_data
+        query.message.edit_reply_markup.assert_not_called()
 
+
+class TestOnReplyModeButton:
     @pytest.mark.asyncio
-    async def test_chat_id_fallback_to_string_if_not_int(self):
-        query = _make_callback_query("reply:notanint")
+    async def test_stores_message_mode_state_and_prompts_user(self):
+        query = _make_callback_query(
+            "reply_mode:message:42:999",
+            message_text="First line\nSecond line",
+            text_html="<b>First line</b>\nSecond line",
+            message_id=321,
+        )
         update = _make_update_with_query(query)
         ctx = _make_context(bot_data={"allowed_chat_id": -100})
 
-        await _on_reply_button(update, ctx)
+        await _on_reply_mode_button(update, ctx)
 
-        assert ctx.user_data[PENDING_REPLY_KEY] == "notanint"
+        assert ctx.user_data[PENDING_REPLY_KEY] == 42
+        assert ctx.user_data[PENDING_REPLY_MODE_KEY] == "message"
+        assert ctx.user_data[PENDING_REPLY_LABEL_KEY] == "First line"
+        assert ctx.user_data[PENDING_REPLY_SOURCE_CHAT_ID_KEY] == -100
+        assert ctx.user_data[PENDING_REPLY_SOURCE_MESSAGE_ID_KEY] == 321
+        assert ctx.user_data[PENDING_REPLY_SOURCE_MAX_MESSAGE_ID_KEY] == "999"
+        assert ctx.user_data[PENDING_REPLY_SOURCE_HTML_KEY] == "<b>First line</b>\nSecond line"
+        assert ctx.user_data[PENDING_REPLY_SOURCE_KIND_KEY] == "text"
+        assert ctx.user_data[PENDING_REPLY_PROMPT_CHAT_ID_KEY] == -100
+        assert ctx.user_data[PENDING_REPLY_PROMPT_MESSAGE_ID_KEY] == 555
+        query.message.edit_reply_markup.assert_awaited_once()
+        query.message.reply_text.assert_awaited_once()
+        prompt_text = query.message.reply_text.call_args.args[0]
+        assert "Режим: сообщением" in prompt_text
 
     @pytest.mark.asyncio
-    async def test_prompts_user_to_write_reply(self):
-        query = _make_callback_query("reply:42", message_text="Hello")
+    async def test_stores_reply_mode_state(self):
+        query = _make_callback_query("reply_mode:reply:42:999", message_text="Hello")
         update = _make_update_with_query(query)
         ctx = _make_context(bot_data={"allowed_chat_id": -100})
 
-        await _on_reply_button(update, ctx)
+        await _on_reply_mode_button(update, ctx)
 
-        query.message.reply_text.assert_called_once()
+        assert ctx.user_data[PENDING_REPLY_MODE_KEY] == "reply"
+        prompt_text = query.message.reply_text.call_args.args[0]
+        assert "Режим: reply" in prompt_text
 
 
 class TestOnCancel:
@@ -201,10 +193,12 @@ class TestOnCancel:
             user_data={
                 PENDING_REPLY_KEY: 42,
                 PENDING_REPLY_LABEL_KEY: "label",
+                PENDING_REPLY_MODE_KEY: "message",
                 PENDING_REPLY_PROMPT_CHAT_ID_KEY: -100,
                 PENDING_REPLY_PROMPT_MESSAGE_ID_KEY: 555,
                 PENDING_REPLY_SOURCE_CHAT_ID_KEY: -100,
                 PENDING_REPLY_SOURCE_MESSAGE_ID_KEY: 111,
+                PENDING_REPLY_SOURCE_MAX_MESSAGE_ID_KEY: "999",
                 PENDING_REPLY_SOURCE_HTML_KEY: "Hello",
                 PENDING_REPLY_SOURCE_KIND_KEY: "text",
             }
@@ -212,12 +206,7 @@ class TestOnCancel:
 
         await _on_cancel(update, ctx)
 
-        assert PENDING_REPLY_KEY not in ctx.user_data
-        assert PENDING_REPLY_LABEL_KEY not in ctx.user_data
-        assert PENDING_REPLY_PROMPT_CHAT_ID_KEY not in ctx.user_data
-        assert PENDING_REPLY_PROMPT_MESSAGE_ID_KEY not in ctx.user_data
-        assert PENDING_REPLY_SOURCE_CHAT_ID_KEY not in ctx.user_data
-        assert PENDING_REPLY_SOURCE_MESSAGE_ID_KEY not in ctx.user_data
+        assert ctx.user_data == {}
         ctx.bot.delete_message.assert_awaited_once_with(chat_id=-100, message_id=555)
         update.message.reply_text.assert_not_called()
 
@@ -238,8 +227,10 @@ class TestOnTextReply:
     def _pending_state(
         max_chat_id=42,
         label="Chat",
+        mode="message",
         source_chat_id=-100,
         source_message_id=111,
+        source_max_message_id="999",
         source_html="Line1\nLine2",
         source_kind="text",
         prompt_chat_id=-100,
@@ -248,8 +239,10 @@ class TestOnTextReply:
         return {
             PENDING_REPLY_KEY: max_chat_id,
             PENDING_REPLY_LABEL_KEY: label,
+            PENDING_REPLY_MODE_KEY: mode,
             PENDING_REPLY_SOURCE_CHAT_ID_KEY: source_chat_id,
             PENDING_REPLY_SOURCE_MESSAGE_ID_KEY: source_message_id,
+            PENDING_REPLY_SOURCE_MAX_MESSAGE_ID_KEY: source_max_message_id,
             PENDING_REPLY_SOURCE_HTML_KEY: source_html,
             PENDING_REPLY_SOURCE_KIND_KEY: source_kind,
             PENDING_REPLY_PROMPT_CHAT_ID_KEY: prompt_chat_id,
@@ -257,49 +250,39 @@ class TestOnTextReply:
         }
 
     @pytest.mark.asyncio
-    async def test_sends_to_max_in_private_chat(self):
+    async def test_sends_plain_message_mode_to_max(self):
         max_client = MagicMock()
         max_client.send_message = AsyncMock(return_value={"ok": True})
 
         update = _make_message_update("Hello", chat_type="private")
         ctx = _make_context(
-            user_data=self._pending_state(),
+            user_data=self._pending_state(mode="message"),
             bot_data={"max_client": max_client},
         )
 
         await _on_text_reply(update, ctx)
 
-        max_client.send_message.assert_called_once_with(42, "Hello", [])
+        max_client.send_message.assert_called_once_with(42, "Hello", [], link=None)
 
     @pytest.mark.asyncio
-    async def test_sends_to_max_in_group_chat_without_sender_prefix(self):
+    async def test_sends_reply_mode_to_max_with_link(self):
         max_client = MagicMock()
         max_client.send_message = AsyncMock(return_value={"ok": True})
 
-        update = _make_message_update("Hello", chat_type="group", user_name="Bob")
+        update = _make_message_update("Hello", chat_type="private")
         ctx = _make_context(
-            user_data=self._pending_state(max_chat_id=55, label="Group"),
+            user_data=self._pending_state(mode="reply", source_max_message_id="12345"),
             bot_data={"max_client": max_client},
         )
 
         await _on_text_reply(update, ctx)
 
-        max_client.send_message.assert_called_once_with(55, "Hello", [])
-
-    @pytest.mark.asyncio
-    async def test_sends_to_max_in_supergroup_chat_without_sender_prefix(self):
-        max_client = MagicMock()
-        max_client.send_message = AsyncMock(return_value={"ok": True})
-
-        update = _make_message_update("Hi", chat_type="supergroup", user_name="Carol")
-        ctx = _make_context(
-            user_data=self._pending_state(max_chat_id=77, label="Supergroup"),
-            bot_data={"max_client": max_client},
+        max_client.send_message.assert_called_once_with(
+            42,
+            "Hello",
+            [],
+            link={"type": "REPLY", "messageId": 12345},
         )
-
-        await _on_text_reply(update, ctx)
-
-        max_client.send_message.assert_called_once_with(77, "Hi", [])
 
     @pytest.mark.asyncio
     async def test_does_nothing_without_pending_reply(self):
@@ -340,6 +323,7 @@ class TestOnTextReply:
                 label="X",
                 source_chat_id=-100,
                 source_message_id=321,
+                source_max_message_id="999",
                 source_html="✉ <b>Anna</b>\nПривет",
                 source_kind="text",
             ),
@@ -354,6 +338,8 @@ class TestOnTextReply:
         assert kwargs["message_id"] == 321
         assert kwargs["parse_mode"] == "HTML"
         assert "📩 Alice\nHi" in kwargs["text"]
+        buttons = kwargs["reply_markup"].inline_keyboard[0]
+        assert buttons[0].callback_data == "reply:1:999"
         ctx.bot.delete_message.assert_any_await(chat_id=-100, message_id=555)
         ctx.bot.delete_message.assert_any_await(chat_id=-100, message_id=777)
         update.message.reply_text.assert_not_called()
@@ -392,8 +378,7 @@ class TestOnTextReply:
 
         ctx.bot.delete_message.assert_awaited_once_with(chat_id=-100, message_id=555)
         update.message.reply_text.assert_called_once()
-        args = update.message.reply_text.call_args[0][0]
-        assert "⚠️" in args
+        assert "⚠️" in update.message.reply_text.call_args.args[0]
 
     @pytest.mark.asyncio
     async def test_replies_warning_on_send_failure(self):
@@ -410,8 +395,7 @@ class TestOnTextReply:
 
         ctx.bot.delete_message.assert_awaited_once_with(chat_id=-100, message_id=555)
         update.message.reply_text.assert_called_once()
-        args = update.message.reply_text.call_args[0][0]
-        assert "⚠️" in args
+        assert "⚠️" in update.message.reply_text.call_args.args[0]
 
     @pytest.mark.asyncio
     async def test_replies_warning_on_exception(self):
@@ -428,8 +412,24 @@ class TestOnTextReply:
 
         ctx.bot.delete_message.assert_awaited_once_with(chat_id=-100, message_id=555)
         update.message.reply_text.assert_called_once()
-        args = update.message.reply_text.call_args[0][0]
-        assert "⚠️" in args
+        assert "⚠️" in update.message.reply_text.call_args.args[0]
+
+    @pytest.mark.asyncio
+    async def test_reply_mode_requires_source_message_id(self):
+        max_client = MagicMock()
+        max_client.send_message = AsyncMock()
+
+        update = _make_message_update("Hello", chat_type="private")
+        ctx = _make_context(
+            user_data=self._pending_state(mode="reply", source_max_message_id=None),
+            bot_data={"max_client": max_client},
+        )
+
+        await _on_text_reply(update, ctx)
+
+        max_client.send_message.assert_not_called()
+        update.message.reply_text.assert_called_once()
+        assert "Reply недоступен" in update.message.reply_text.call_args.args[0]
 
     @pytest.mark.asyncio
     async def test_falls_back_to_success_message_when_source_is_not_editable(self):
@@ -452,7 +452,7 @@ class TestOnTextReply:
         ctx.bot.edit_message_text.assert_not_called()
         ctx.bot.edit_message_caption.assert_not_called()
         update.message.reply_text.assert_called_once()
-        args = update.message.reply_text.call_args[0][0]
+        args = update.message.reply_text.call_args.args[0]
         assert "<b>evil</b>" not in args
         assert "&lt;b&gt;evil&lt;/b&gt;" in args
         ctx.bot.delete_message.assert_any_await(chat_id=-100, message_id=777)
@@ -477,6 +477,5 @@ class TestOnTextReply:
         await _on_text_reply(update, ctx)
 
         update.message.reply_text.assert_called_once()
-        args = update.message.reply_text.call_args[0][0]
-        assert "✅" in args
+        assert "✅" in update.message.reply_text.call_args.args[0]
         ctx.bot.delete_message.assert_any_await(chat_id=-100, message_id=777)

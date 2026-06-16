@@ -361,16 +361,19 @@ class MaxClient:
         log.info("fetch_contacts(%s) → keys: %s", contact_ids, list(resp.keys()))
         return resp
 
-    async def send_message(self, chat_id, text: str, elements=None) -> dict:
+    async def send_message(self, chat_id, text: str, elements=None, link: dict | None = None) -> dict:
         """Send a text message to a Max chat. Returns the server response."""
         if elements is None:
             elements = []
         cid = int(time.time() * 1000) * 1000 + random.randint(0, 999)
+        message_payload = {"text": text, "cid": cid, "elements": elements}
+        if link:
+            message_payload["link"] = link
         resp = await self.cmd(
             OpCode.SEND_MESSAGE,
             {
                 "chatId": chat_id,
-                "message": {"text": text, "cid": cid, "elements": elements},
+                "message": message_payload,
                 "notify": True,
             },
         )

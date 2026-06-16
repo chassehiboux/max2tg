@@ -290,7 +290,7 @@ def create_max_client(
         is_dm = resolver.is_dm(msg.chat_id)
         chat_label = escape(resolver.chat_name(msg.chat_id))
         header_text = _header(msg, sender_label, chat_label, is_dm)
-        kb = reply_keyboard(msg.chat_id) if reply_enabled else None
+        kb = reply_keyboard(msg.chat_id, msg.message_id) if reply_enabled else None
 
         link = msg.link
         link_type = link.get("type") if isinstance(link, dict) else None

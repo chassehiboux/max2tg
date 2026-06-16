@@ -13,16 +13,18 @@ from telegram.ext import (
 )
 
 from app.max_client import MaxClient
-from app.tg_sender import reply_keyboard
+from app.tg_sender import reply_keyboard, reply_mode_keyboard
 
 log = logging.getLogger(__name__)
 
 PENDING_REPLY_KEY = "pending_reply_chat_id"
 PENDING_REPLY_LABEL_KEY = "pending_reply_label"
+PENDING_REPLY_MODE_KEY = "pending_reply_mode"
 PENDING_REPLY_PROMPT_CHAT_ID_KEY = "pending_reply_prompt_chat_id"
 PENDING_REPLY_PROMPT_MESSAGE_ID_KEY = "pending_reply_prompt_message_id"
 PENDING_REPLY_SOURCE_CHAT_ID_KEY = "pending_reply_source_chat_id"
 PENDING_REPLY_SOURCE_MESSAGE_ID_KEY = "pending_reply_source_message_id"
+PENDING_REPLY_SOURCE_MAX_MESSAGE_ID_KEY = "pending_reply_source_max_message_id"
 PENDING_REPLY_SOURCE_HTML_KEY = "pending_reply_source_html"
 PENDING_REPLY_SOURCE_KIND_KEY = "pending_reply_source_kind"
 
@@ -33,13 +35,54 @@ def _pop_pending_reply_state(context: ContextTypes.DEFAULT_TYPE) -> dict:
     return {
         "max_chat_id": context.user_data.pop(PENDING_REPLY_KEY, None),
         "label": context.user_data.pop(PENDING_REPLY_LABEL_KEY, None),
+        "mode": context.user_data.pop(PENDING_REPLY_MODE_KEY, None),
         "prompt_chat_id": context.user_data.pop(PENDING_REPLY_PROMPT_CHAT_ID_KEY, None),
         "prompt_message_id": context.user_data.pop(PENDING_REPLY_PROMPT_MESSAGE_ID_KEY, None),
         "source_chat_id": context.user_data.pop(PENDING_REPLY_SOURCE_CHAT_ID_KEY, None),
         "source_message_id": context.user_data.pop(PENDING_REPLY_SOURCE_MESSAGE_ID_KEY, None),
+        "source_max_message_id": context.user_data.pop(PENDING_REPLY_SOURCE_MAX_MESSAGE_ID_KEY, None),
         "source_html": context.user_data.pop(PENDING_REPLY_SOURCE_HTML_KEY, None),
         "source_kind": context.user_data.pop(PENDING_REPLY_SOURCE_KIND_KEY, None),
     }
+
+
+def _callback_allowed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    allowed_chat_id = context.bot_data.get(_ALLOWED_CHAT_ID_KEY)
+    return not (
+        allowed_chat_id is not None
+        and update.effective_chat.id != allowed_chat_id
+        and update.effective_user.id != allowed_chat_id
+    )
+
+
+def _parse_reply_target(data: str, prefix: str) -> tuple[int | str, str | None] | None:
+    if not data.startswith(prefix):
+        return None
+
+    payload = data[len(prefix):]
+    if payload.startswith(":"):
+        payload = payload[1:]
+    if not payload:
+        return None
+
+    parts = payload.split(":", 1)
+    chat_id_str = parts[0]
+    max_message_id = parts[1] if len(parts) == 2 and parts[1] else None
+
+    try:
+        max_chat_id = int(chat_id_str)
+    except ValueError:
+        max_chat_id = chat_id_str
+
+    return max_chat_id, max_message_id
+
+
+def _reply_link_message_id(raw_message_id: str | None) -> int | str | None:
+    if raw_message_id in (None, ""):
+        return None
+    if isinstance(raw_message_id, str) and raw_message_id.lstrip("-").isdigit():
+        return int(raw_message_id)
+    return raw_message_id
 
 
 async def _delete_message_safe(bot, chat_id: int | None, message_id: int | None, action: str) -> None:
@@ -77,7 +120,7 @@ async def _append_reply_to_source_message(bot, state: dict, reply_author: str, r
 
     reply_block = f"📩 {html.escape(reply_author)}\n{html.escape(reply_text)}"
     updated_html = f"{base_html}\n\n{reply_block}"
-    reply_markup = reply_keyboard(state["max_chat_id"])
+    reply_markup = reply_keyboard(state["max_chat_id"], state["source_max_message_id"])
 
     if content_kind == "caption":
         await bot.edit_message_caption(
@@ -103,38 +146,62 @@ async def _on_reply_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     """Handle inline 'Reply' button press."""
     query = update.callback_query
 
-    allowed_chat_id = context.bot_data.get(_ALLOWED_CHAT_ID_KEY)
-    if allowed_chat_id is not None and (
-        update.effective_chat.id != allowed_chat_id
-        and update.effective_user.id != allowed_chat_id
-    ):
+    if not _callback_allowed(update, context):
+        await query.answer()
+        return
+
+    await query.answer()
+
+    target = _parse_reply_target(query.data or "", "reply")
+    if target is None:
+        return
+
+    max_chat_id, max_message_id = target
+    await query.message.edit_reply_markup(reply_markup=reply_mode_keyboard(max_chat_id, max_message_id))
+
+
+async def _on_reply_mode_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle reply mode selection."""
+    query = update.callback_query
+
+    if not _callback_allowed(update, context):
         await query.answer()
         return
 
     await query.answer()
 
     data = query.data or ""
-    if not data.startswith("reply:"):
+    if data.startswith("reply_mode:message:"):
+        mode = "message"
+        target = _parse_reply_target(data, "reply_mode:message")
+    elif data.startswith("reply_mode:reply:"):
+        mode = "reply"
+        target = _parse_reply_target(data, "reply_mode:reply")
+    else:
         return
 
-    chat_id_str = data[len("reply:"):]
-    try:
-        max_chat_id = int(chat_id_str)
-    except ValueError:
-        max_chat_id = chat_id_str
+    if target is None:
+        return
 
+    max_chat_id, max_message_id = target
     source_html, source_kind = _message_html(query.message)
     context.user_data[PENDING_REPLY_KEY] = max_chat_id
+    context.user_data[PENDING_REPLY_MODE_KEY] = mode
     source_text = query.message.text or query.message.caption or ""
     label = source_text.split("\n")[0] if source_text else str(max_chat_id)
     context.user_data[PENDING_REPLY_LABEL_KEY] = label
     context.user_data[PENDING_REPLY_SOURCE_CHAT_ID_KEY] = query.message.chat_id
     context.user_data[PENDING_REPLY_SOURCE_MESSAGE_ID_KEY] = query.message.message_id
+    context.user_data[PENDING_REPLY_SOURCE_MAX_MESSAGE_ID_KEY] = max_message_id
     context.user_data[PENDING_REPLY_SOURCE_HTML_KEY] = source_html
     context.user_data[PENDING_REPLY_SOURCE_KIND_KEY] = source_kind
+    await query.message.edit_reply_markup(reply_markup=reply_keyboard(max_chat_id, max_message_id))
+
+    mode_label = "сообщением" if mode == "message" else "reply"
 
     prompt_message = await query.message.reply_text(
-        f"✏️ Напишите ответ для <b>{html.escape(label)}</b> (ответом на оригинальное сообщение):\n"
+        f"✏️ Напишите ответ для <b>{html.escape(label)}</b>:\n"
+        f"<i>Режим: {mode_label}</i>\n"
         "<i>(или /cancel для отмены)</i>",
         parse_mode=ParseMode.HTML,
     )
@@ -172,7 +239,15 @@ async def _on_text_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     text = update.message.text
     try:
-        resp = await max_client.send_message(max_chat_id, text, [])
+        link = None
+        if state["mode"] == "reply":
+            reply_message_id = _reply_link_message_id(state["source_max_message_id"])
+            if reply_message_id is None:
+                await update.message.reply_text("⚠️ Для этого сообщения режим Reply недоступен.")
+                return
+            link = {"type": "REPLY", "messageId": reply_message_id}
+
+        resp = await max_client.send_message(max_chat_id, text, [], link=link)
         if resp:
             try:
                 edited = await _append_reply_to_source_message(context.bot, state, update.message.from_user.full_name, text)
@@ -214,6 +289,7 @@ def build_tg_app(token: str, max_client: MaxClient, allowed_chat_id: str,
     chat_filter = filters.Chat(chat_id=int(allowed_chat_id))
 
     app.add_handler(CallbackQueryHandler(_on_reply_button, pattern=r"^reply:"))
+    app.add_handler(CallbackQueryHandler(_on_reply_mode_button, pattern=r"^reply_mode:"))
     app.add_handler(CommandHandler("cancel", _on_cancel, filters=chat_filter))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & chat_filter, _on_text_reply))
     app.add_error_handler(_on_telegram_error)

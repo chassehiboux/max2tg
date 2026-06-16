@@ -1,6 +1,7 @@
 """Tests for app/max_client.py — OpCode enum and _parse_message."""
 
 import pytest
+from unittest.mock import AsyncMock
 from app.max_client import MaxClient, MaxMessage, OpCode
 
 
@@ -318,3 +319,17 @@ class TestMaskSensitive:
         masked = MaxClient._mask_sensitive(text)
         assert "secret-value" not in masked
         assert masked == '{"token":"***'
+
+
+class TestSendMessage:
+    @pytest.mark.asyncio
+    async def test_includes_reply_link_when_provided(self):
+        client = MaxClient(token="tok", device_id="dev")
+        client.cmd = AsyncMock(return_value={"ok": True})
+
+        await client.send_message(42, "Hello", [], link={"type": "REPLY", "messageId": 123})
+
+        payload = client.cmd.await_args.args[1]
+        assert payload["chatId"] == 42
+        assert payload["message"]["text"] == "Hello"
+        assert payload["message"]["link"] == {"type": "REPLY", "messageId": 123}
