@@ -85,6 +85,25 @@ def ask_yes_no(prompt: str, default: bool) -> bool:
         print("Введите y/yes/да или n/no/нет.")
 
 
+def prompt_command_choice() -> str:
+    print("Выберите режим запуска:")
+    print("1. start - запустить бота")
+    print("2. stop - остановить бота")
+
+    choices = {
+        "1": "start",
+        "start": "start",
+        "2": "stop",
+        "stop": "stop",
+    }
+    while True:
+        answer = input("Введите 1 или 2: ").strip().lower()
+        command = choices.get(answer)
+        if command:
+            return command
+        print("Некорректный выбор. Введите 1 для start или 2 для stop.")
+
+
 def prompt_required_credentials() -> dict[str, str]:
     prompts = (
         ("MAX_TOKEN", "MAX_TOKEN (__oneme_auth из web.max.ru)"),
@@ -343,16 +362,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
-    parser = build_parser()
-    args = parser.parse_args()
     repo_root = Path(__file__).resolve().parent.parent
+    if len(sys.argv) == 1:
+        command = prompt_command_choice()
+    else:
+        parser = build_parser()
+        args = parser.parse_args()
+        command = args.command
 
-    if args.command == "start":
+    if command == "start":
         return start_bot(repo_root)
-    if args.command == "stop":
+    if command == "stop":
         return stop_bot(repo_root)
 
-    parser.error(f"Неизвестная команда: {args.command}")
+    raise ValueError(f"Неизвестная команда: {command}")
     return 2
 
 
