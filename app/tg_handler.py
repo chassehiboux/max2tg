@@ -10,7 +10,6 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
-import telegram.constants
 
 from app.max_client import MaxClient
 
@@ -81,18 +80,8 @@ async def _on_text_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     text = update.message.text
-    elements = []
-    if update.message.chat.type in [telegram.constants.ChatType.GROUP, telegram.constants.ChatType.SUPERGROUP]:
-        text = f"💬 {update.message.from_user.full_name}:\n{text}"
-        elements = [
-            {
-                "type": "STRONG",
-                "length": len(update.message.from_user.full_name)+1,
-                "from": 2
-            }
-        ]
     try:
-        resp = await max_client.send_message(max_chat_id, text, elements)
+        resp = await max_client.send_message(max_chat_id, text, [])
         if resp:
             safe_target = html.escape(str(label or max_chat_id))
             await update.message.reply_text(f"✅ Отправлено → <b>{safe_target}</b>", parse_mode="HTML")

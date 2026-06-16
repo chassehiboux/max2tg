@@ -188,14 +188,10 @@ class TestOnTextReply:
 
         await _on_text_reply(update, ctx)
 
-        call_args = max_client.send_message.call_args
-        sent_text = call_args[0][1]
-        sent_elements = call_args[0][2]
-        assert "Bob" in sent_text
-        assert sent_elements != []
+        max_client.send_message.assert_called_once_with(55, "Hello", [])
 
     @pytest.mark.asyncio
-    async def test_sends_to_max_in_supergroup_chat_with_sender_prefix(self):
+    async def test_sends_to_max_in_supergroup_chat_without_sender_prefix(self):
         max_client = MagicMock()
         max_client.send_message = AsyncMock(return_value={"ok": True})
 
@@ -207,9 +203,7 @@ class TestOnTextReply:
 
         await _on_text_reply(update, ctx)
 
-        call_args = max_client.send_message.call_args
-        sent_text = call_args[0][1]
-        assert "Carol" in sent_text
+        max_client.send_message.assert_called_once_with(77, "Hi", [])
 
     @pytest.mark.asyncio
     async def test_does_nothing_without_pending_reply(self):
