@@ -302,6 +302,30 @@ class TestAdminBindings:
         sender.send_admin.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_chat_shared_allows_reusing_same_group_for_another_chat(self, tmp_path):
+        ctx, router, sender = _make_context(tmp_path, can_access_chat=True)
+        router.store.ensure_chat(42, "Chat A", "GROUP")
+        router.store.ensure_chat(43, "Chat B", "GROUP")
+        router.store.set_binding(42, -100500, "Shared Group")
+        router.store.mark_bound(42)
+        ctx.user_data[PENDING_BIND_REQUESTS_KEY] = {"77": "43"}
+        update = _make_chat_shared_update(77, title="Shared Group")
+
+        await _on_chat_shared(update, ctx)
+
+        first = router.store.get_chat(42)
+        second = router.store.get_chat(43)
+        assert first is not None
+        assert second is not None
+        assert first["tg_chat_id"] == -100500
+        assert second["tg_chat_id"] == -100500
+        assert second["state"] == STATE_BOUND
+        first_reply = update.message.reply_text.await_args_list[0].args[0]
+        assert "Привязка сохранена" in first_reply
+        assert "уже привязана" not in first_reply
+        sender.send_admin.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_toggle_tracking_marks_chat_muted(self, tmp_path):
         ctx, router, _ = _make_context(tmp_path)
         router.store.ensure_chat(42, "Chat A", "GROUP")

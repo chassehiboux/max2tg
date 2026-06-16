@@ -402,22 +402,12 @@ async def _on_chat_shared(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         max_chat_id = max_chat_id_raw
 
     router = _router(context)
-    binding, conflict = await router.bind_chat(
+    binding = await router.bind_chat(
         max_chat_id,
         chat_shared.chat_id,
         tg_chat_title=chat_shared.title,
         tg_chat_username=chat_shared.username,
     )
-
-    if conflict is not None:
-        await message.reply_text(
-            "⚠️ Эта Telegram-группа уже привязана к другому чату MAX:\n"
-            f"{html.escape(str(conflict.get('max_chat_title') or conflict.get('max_chat_id')))}",
-            parse_mode=ParseMode.HTML,
-            reply_markup=ReplyKeyboardRemove(),
-        )
-        await message.reply_text("Используйте список ниже, чтобы выбрать другой чат или другую группу.", reply_markup=admin_home_keyboard())
-        return
 
     if binding.get("state") == STATE_BOUND:
         text = (

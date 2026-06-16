@@ -128,14 +128,10 @@ class ChatRouter:
         tg_chat_id: int,
         tg_chat_title: str | None = None,
         tg_chat_username: str | None = None,
-    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
-        existing = self.store.find_by_tg_chat_id(tg_chat_id)
-        if existing is not None and str(existing.get("max_chat_id")) != str(max_chat_id):
-            return {}, existing
-
+    ) -> dict[str, Any]:
         binding = self.store.set_binding(max_chat_id, tg_chat_id, tg_chat_title, tg_chat_username)
         binding = await self._probe_chat(binding)
-        return binding, None
+        return binding
 
     def toggle_tracking(self, max_chat_id: Any) -> dict[str, Any]:
         binding = self.store.get_chat(max_chat_id)

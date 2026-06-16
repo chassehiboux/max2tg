@@ -44,6 +44,20 @@ class TestChatBindingsStore:
 
 class TestChatRouter:
     @pytest.mark.asyncio
+    async def test_bind_chat_allows_reusing_same_group_for_multiple_max_chats(self, tmp_path):
+        router, _ = _make_router(tmp_path, can_access=True)
+        router.store.ensure_chat(42, "Chat A", "GROUP")
+        router.store.ensure_chat(43, "Chat B", "GROUP")
+
+        first = await router.bind_chat(42, -100500, "Shared Group")
+        second = await router.bind_chat(43, -100500, "Shared Group")
+
+        assert first["state"] == STATE_BOUND
+        assert second["state"] == STATE_BOUND
+        assert router.store.get_chat(42)["tg_chat_id"] == -100500
+        assert router.store.get_chat(43)["tg_chat_id"] == -100500
+
+    @pytest.mark.asyncio
     async def test_route_payload_queues_when_group_unavailable(self, tmp_path):
         router, sender = _make_router(tmp_path, can_access=False)
         delivered = AsyncMock()
