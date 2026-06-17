@@ -126,6 +126,21 @@ class TestReconnectNotification:
         sent_messages = [call.args[0] for call in sender.send_admin.await_args_list]
         assert any("2" in message and "подключён" in message for message in sent_messages)
 
+    async def test_startup_notification_counts_stored_chats_not_only_snapshot(self, tmp_path):
+        client, sender = _make_client(tmp_path)
+        client._test_router.store.ensure_chat(200, "Stored Chat", "DIALOG")
+        snapshot = {
+            "profile": {"id": 1, "names": []},
+            "chats": [
+                {"id": 100, "type": "GROUP", "title": "Snapshot Chat", "participants": {}},
+            ],
+        }
+
+        await client._on_ready_cb(snapshot)
+
+        sent_messages = [call.args[0] for call in sender.send_admin.await_args_list]
+        assert any("2" in message and "подключён" in message for message in sent_messages)
+
     async def test_notification_sent_on_reconnect(self, tmp_path):
         client, sender = _make_client(tmp_path)
         snapshot = {"profile": {"id": 1, "names": []}, "chats": []}
@@ -159,12 +174,12 @@ class TestReadyContactResolution:
             await client._on_ready_cb(snapshot)
 
             binding = client._test_router.store.get_chat(99)
-            assert binding["max_chat_title"] == "DM:55"
+            assert binding is None
 
             for _ in range(5):
                 await asyncio.sleep(0)
                 binding = client._test_router.store.get_chat(99)
-                if binding["max_chat_title"] == "Анна Безверхая":
+                if binding is not None and binding["max_chat_title"] == "Анна Безверхая":
                     break
 
         assert binding["max_chat_title"] == "Анна Безверхая"

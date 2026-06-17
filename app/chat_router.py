@@ -87,7 +87,11 @@ class ChatRouter:
             chat_id = chat.get("id")
             if chat_id is None:
                 continue
-            title = chat.get("title") or str(chat_id)
+            title = chat.get("title")
+            if chat.get("type") == "DIALOG" and not _is_resolved_chat_title(title):
+                log.info("Deferring MAX dialog %s until contact name is resolved", chat_id)
+                continue
+            title = title or str(chat_id)
             _, created = self.store.ensure_chat(chat_id, title, chat.get("type"))
             if created:
                 new_count += 1
@@ -120,7 +124,19 @@ class ChatRouter:
         max_chat_id: Any,
         max_chat_title: str,
         max_chat_type: str | None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | None:
+        if max_chat_type == "DIALOG" and not _is_resolved_chat_title(max_chat_title):
+            binding = self.store.get_chat(max_chat_id)
+            if binding is not None:
+                log.info(
+                    "Keeping stored title for unresolved MAX dialog %s: %s",
+                    max_chat_id,
+                    binding.get("max_chat_title"),
+                )
+                return binding
+            log.info("Deferring new MAX dialog %s until contact name is resolved", max_chat_id)
+            return None
+
         binding, created = self.store.ensure_chat(max_chat_id, max_chat_title, max_chat_type)
         if created and self._initial_snapshot_seen and not binding.get("new_chat_notified"):
             await self.send_admin(
@@ -198,6 +214,8 @@ class ChatRouter:
         max_chat_type: str | None,
     ) -> None:
         binding = await self.register_live_chat(max_chat_id, max_chat_title, max_chat_type)
+        if binding is None:
+            return
         state = binding.get("state")
 
         if state == STATE_MUTED:
@@ -279,9 +297,25 @@ class ChatRouter:
             self.store.mark_forum_available(True)
 
         topic_name = _topic_name(binding)
+        if (
+            binding.get("max_chat_type") == "DIALOG" or topic_name.startswith("DM:")
+        ) and not _is_resolved_chat_title(topic_name):
+            log.info(
+                "Skipping Telegram topic sync for unresolved MAX dialog %s: %s",
+                binding.get("max_chat_id"),
+                topic_name,
+            )
+            return binding
+
         topic_id = binding.get("tg_topic_id")
         if topic_id is not None:
             if binding.get("tg_topic_name") != topic_name:
+                log.info(
+                    "Renaming Telegram topic for MAX chat %s: %r -> %r",
+                    binding.get("max_chat_id"),
+                    binding.get("tg_topic_name"),
+                    topic_name,
+                )
                 try:
                     await self.sender.edit_forum_topic(int(tg_forum_chat_id), int(topic_id), topic_name)
                 except TelegramError as exc:
@@ -306,6 +340,11 @@ class ChatRouter:
             return binding
 
         try:
+            log.info(
+                "Creating Telegram topic for MAX chat %s: %r",
+                binding.get("max_chat_id"),
+                topic_name,
+            )
             topic = await self.sender.create_forum_topic(int(tg_forum_chat_id), topic_name)
         except TelegramError as exc:
             if _is_target_unavailable(exc):
@@ -404,6 +443,17 @@ def _topic_name(binding: dict[str, Any]) -> str:
     if len(name) <= TOPIC_NAME_MAX_LENGTH:
         return name
     return name[:TOPIC_NAME_MAX_LENGTH]
+
+
+def _is_resolved_chat_title(title: Any) -> bool:
+    if not isinstance(title, str):
+        return False
+    stripped = title.strip()
+    if not stripped:
+        return False
+    if stripped.startswith("DM:"):
+        return False
+    return not stripped.lstrip("-").isdigit()
 
 
 def _topic_message_thread_id(topic: Any) -> int | None:

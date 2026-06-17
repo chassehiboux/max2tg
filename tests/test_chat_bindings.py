@@ -125,3 +125,35 @@ class TestChatRouter:
         assert binding["tg_topic_name"] == "New Chat"
         sender.edit_forum_topic.assert_awaited_once_with(-100500, 77, "New Chat")
         delivered.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_sync_snapshot_does_not_create_unresolved_dialog(self, tmp_path):
+        router, _ = _make_router(tmp_path)
+
+        await router.sync_snapshot({
+            "chats": [{
+                "id": 42,
+                "type": "DIALOG",
+                "participants": {"1": {}, "45482319": {}},
+            }]
+        })
+
+        assert router.store.get_chat(42) is None
+
+    @pytest.mark.asyncio
+    async def test_unresolved_dialog_keeps_existing_topic_name(self, tmp_path):
+        router, sender = _make_router(tmp_path, topic_id=77)
+        delivered = AsyncMock()
+        router.set_delivery_callback(delivered)
+        router.store.ensure_chat(42, "Катерина Золотова", "DIALOG")
+        router.store.set_forum(-100500, "Work Forum")
+        router.store.set_topic(42, -100500, 77, "Катерина Золотова")
+
+        await router.route_payload(42, {"chatId": 42, "message": {"text": "hello"}}, "DM:45482319", "DIALOG")
+
+        binding = router.store.get_chat(42)
+        assert binding["max_chat_title"] == "Катерина Золотова"
+        assert binding["tg_topic_name"] == "Катерина Золотова"
+        sender.edit_forum_topic.assert_not_awaited()
+        sender.create_forum_topic.assert_not_awaited()
+        delivered.assert_awaited_once()

@@ -30,6 +30,25 @@ def _header(msg: MaxMessage, sender_label: str, chat_label: str, is_dm: bool) ->
     return f"💬 <b>{chat_label}</b> | {sender_label}"
 
 
+def _is_resolved_chat_title(title) -> bool:
+    if not isinstance(title, str):
+        return False
+    stripped = title.strip()
+    if not stripped:
+        return False
+    if stripped.startswith("DM:"):
+        return False
+    return not stripped.lstrip("-").isdigit()
+
+
+def _iter_resolved_chats(resolver: ContactResolver):
+    for chat_id, chat_title in resolver.chats.items():
+        if resolver.is_dm(chat_id) and not _is_resolved_chat_title(chat_title):
+            log.info("Skip unresolved MAX dialog %s during topic sync: %s", chat_id, chat_title)
+            continue
+        yield chat_id, chat_title
+
+
 def _extract_photo_url(attach: dict) -> str | None:
     """Extract the best available URL for a PHOTO attachment."""
     return attach.get("baseUrl") or attach.get("url")
@@ -398,7 +417,9 @@ def create_max_client(
         sender_label = escape(await resolver.resolve_user(msg.sender_id))
         is_dm = resolver.is_dm(msg.chat_id)
         chat_name = resolver.chat_name(msg.chat_id)
-        if chat_name == str(msg.chat_id):
+        if is_dm and not _is_resolved_chat_title(chat_name):
+            chat_name = binding.get("max_chat_title") or chat_name
+        elif chat_name == str(msg.chat_id):
             chat_name = binding.get("max_chat_title") or chat_name
         chat_label = escape(chat_name)
         header_text = _header(msg, sender_label, chat_label, is_dm)
@@ -502,7 +523,7 @@ def create_max_client(
         log.info("Known chats: %s", resolver.chats)
         log.info("Known users: %s", resolver.users)
 
-        for chat_id, chat_title in resolver.chats.items():
+        for chat_id, chat_title in _iter_resolved_chats(resolver):
             router.store.ensure_chat(chat_id, chat_title, resolver.chat_types.get(chat_id))
             await router.flush_pending_chat(chat_id)
 
@@ -523,13 +544,13 @@ def create_max_client(
         participant_ids = resolver.load_snapshot(snapshot)
         await router.sync_snapshot(snapshot)
 
-        for chat_id, chat_title in resolver.chats.items():
+        for chat_id, chat_title in _iter_resolved_chats(resolver):
             router.store.ensure_chat(chat_id, chat_title, resolver.chat_types.get(chat_id))
 
         if not _first_connect:
             await router.notify_reconnected()
         else:
-            chat_count = len(resolver.chats)
+            chat_count = len(router.list_chats())
             await router.notify_connected(chat_count)
             await router.maybe_notify_unconfigured_summary()
         _first_connect = False
@@ -568,8 +589,19 @@ def create_max_client(
             return
 
         chat_title = resolver.chat_name(msg.chat_id)
-        if resolver.is_dm(msg.chat_id) and chat_title.startswith("DM:"):
-            chat_title = await resolver.resolve_user(msg.sender_id)
+        if resolver.is_dm(msg.chat_id) and not _is_resolved_chat_title(chat_title):
+            resolved_title = await resolver.resolve_user(msg.sender_id)
+            if _is_resolved_chat_title(resolved_title):
+                chat_title = resolved_title
+            else:
+                binding = router.store.get_chat(msg.chat_id)
+                if binding is None:
+                    log.warning(
+                        "Skip MAX dialog %s message until contact name is resolved",
+                        msg.chat_id,
+                    )
+                    return
+                chat_title = binding.get("max_chat_title") or chat_title
         await router.route_payload(
             msg.chat_id,
             msg.raw,

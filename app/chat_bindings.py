@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +19,8 @@ STATE_PENDING_BOT = "pending_bot"
 
 TRACKING_STATES = {STATE_UNCONFIGURED, STATE_BOUND, STATE_MUTED, STATE_PENDING_BOT}
 MESSAGE_LINK_LIMIT = 1000
+SAVE_RETRIES = 5
+SAVE_RETRY_DELAY_SEC = 0.2
 
 
 class ChatBindingsStore:
@@ -96,7 +99,20 @@ class ChatBindingsStore:
         tmp_path = self.path.with_name(f"{self.path.name}.{uuid4().hex}.tmp")
         try:
             tmp_path.write_text(payload, encoding="utf-8", newline="\n")
-            tmp_path.replace(self.path)
+            for attempt in range(1, SAVE_RETRIES + 1):
+                try:
+                    tmp_path.replace(self.path)
+                    return
+                except OSError:
+                    if attempt >= SAVE_RETRIES:
+                        raise
+                    log.warning(
+                        "Failed to replace chat bindings file, retrying (%d/%d)",
+                        attempt,
+                        SAVE_RETRIES,
+                        exc_info=True,
+                    )
+                    time.sleep(SAVE_RETRY_DELAY_SEC)
         finally:
             try:
                 tmp_path.unlink(missing_ok=True)
@@ -276,17 +292,22 @@ class ChatBindingsStore:
                 self._data["chats"][key] = binding
 
             forum = self._data["forum"]
-            binding["tg_forum_chat_id"] = tg_forum_chat_id
-            binding["tg_forum_title"] = forum.get("tg_forum_title")
-            binding["tg_topic_id"] = tg_topic_id
-            binding["tg_topic_name"] = tg_topic_name
-            binding["tg_topic_error"] = None
-            binding["state"] = STATE_BOUND
-            binding["pending_access_notified"] = False
-            binding["queue_warning_notified"] = False
-            binding["last_access_error"] = None
-            binding["updated_at"] = self._now()
-            self._save_locked()
+            updates = {
+                "tg_forum_chat_id": tg_forum_chat_id,
+                "tg_forum_title": forum.get("tg_forum_title"),
+                "tg_topic_id": tg_topic_id,
+                "tg_topic_name": tg_topic_name,
+                "tg_topic_error": None,
+                "state": STATE_BOUND,
+                "pending_access_notified": False,
+                "queue_warning_notified": False,
+                "last_access_error": None,
+            }
+            changed = any(binding.get(key) != value for key, value in updates.items())
+            if changed:
+                binding.update(updates)
+                binding["updated_at"] = self._now()
+                self._save_locked()
             return deepcopy(binding)
 
     def mark_bound(self, max_chat_id: Any) -> dict[str, Any]:
