@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from telegram.error import BadRequest
 
 from app.chat_bindings import STATE_BOUND, STATE_PENDING_BOT, STATE_UNCONFIGURED, ChatBindingsStore
 from app.chat_router import ChatRouter
@@ -105,3 +106,22 @@ class TestChatRouter:
             {"chatId": 42, "message": {"text": "hello"}},
             binding,
         )
+
+    @pytest.mark.asyncio
+    async def test_topic_not_modified_refreshes_local_topic_name(self, tmp_path):
+        router, sender = _make_router(tmp_path, topic_id=77)
+        delivered = AsyncMock()
+        router.set_delivery_callback(delivered)
+        sender.edit_forum_topic = AsyncMock(side_effect=BadRequest("Topic_not_modified"))
+        router.store.ensure_chat(42, "Old Chat", "GROUP")
+        router.store.set_forum(-100500, "Work Forum")
+        router.store.set_topic(42, -100500, 77, "Old Chat")
+
+        await router.route_payload(42, {"chatId": 42, "message": {"text": "hello"}}, "New Chat", "GROUP")
+
+        binding = router.store.get_chat(42)
+        assert binding["state"] == STATE_BOUND
+        assert binding["max_chat_title"] == "New Chat"
+        assert binding["tg_topic_name"] == "New Chat"
+        sender.edit_forum_topic.assert_awaited_once_with(-100500, 77, "New Chat")
+        delivered.assert_awaited_once()

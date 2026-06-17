@@ -13,7 +13,7 @@ from telegram import (
     ReplyKeyboardMarkup,
 )
 from telegram.constants import ParseMode
-from telegram.error import RetryAfter, TimedOut
+from telegram.error import BadRequest, RetryAfter, TimedOut
 from telegram.request import HTTPXRequest
 
 log = logging.getLogger(__name__)
@@ -21,6 +21,11 @@ log = logging.getLogger(__name__)
 TG_MAX_LENGTH = 4096
 TG_CAPTION_MAX = 1024
 MAX_RETRIES = 3
+
+
+def _is_topic_not_modified(exc: BadRequest) -> bool:
+    message = str(exc).lower().replace(" ", "_").replace("-", "_")
+    return "topic" in message and "not_modified" in message
 
 
 def admin_home_keyboard() -> InlineKeyboardMarkup:
@@ -174,12 +179,24 @@ class TelegramSender:
         )
 
     async def edit_forum_topic(self, chat_id: int, message_thread_id: int, name: str):
+        async def _edit():
+            try:
+                return await self._bot.edit_forum_topic(
+                    chat_id=chat_id,
+                    message_thread_id=message_thread_id,
+                    name=name,
+                )
+            except BadRequest as exc:
+                if _is_topic_not_modified(exc):
+                    log.info(
+                        "Telegram forum topic %s already has the requested name",
+                        message_thread_id,
+                    )
+                    return None
+                raise
+
         return await self._retry(
-            lambda: self._bot.edit_forum_topic(
-                chat_id=chat_id,
-                message_thread_id=message_thread_id,
-                name=name,
-            ),
+            _edit,
             raise_on_failure=True,
         )
 

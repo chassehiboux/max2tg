@@ -285,6 +285,13 @@ class ChatRouter:
                 try:
                     await self.sender.edit_forum_topic(int(tg_forum_chat_id), int(topic_id), topic_name)
                 except TelegramError as exc:
+                    if _is_topic_not_modified(exc):
+                        return self.store.set_topic(
+                            binding["max_chat_id"],
+                            int(tg_forum_chat_id),
+                            int(topic_id),
+                            topic_name,
+                        )
                     if _is_target_unavailable(exc):
                         return self.store.mark_topic_pending(
                             binding["max_chat_id"],
@@ -413,6 +420,8 @@ def _is_target_unavailable(exc: TelegramError) -> bool:
     if isinstance(exc, Forbidden):
         return True
     if isinstance(exc, BadRequest):
+        if _is_topic_not_modified(exc):
+            return False
         message = str(exc).lower()
         return (
             "chat not found" in message
@@ -428,4 +437,11 @@ def _is_target_unavailable(exc: TelegramError) -> bool:
 
 def _is_topic_unavailable_text(text: str) -> bool:
     message = text.lower()
+    if _is_topic_not_modified(message):
+        return False
     return "message thread not found" in message or "topic" in message
+
+
+def _is_topic_not_modified(error: TelegramError | str) -> bool:
+    message = str(error).lower().replace(" ", "_").replace("-", "_")
+    return "topic" in message and "not_modified" in message

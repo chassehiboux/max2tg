@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
 from typing import Any
+from uuid import uuid4
 
 log = logging.getLogger(__name__)
 
@@ -92,9 +93,15 @@ class ChatBindingsStore:
     def _save_locked(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = json.dumps(self._data, ensure_ascii=False, indent=2) + "\n"
-        tmp_path = self.path.with_suffix(f"{self.path.suffix}.tmp")
-        tmp_path.write_text(payload, encoding="utf-8", newline="\n")
-        tmp_path.replace(self.path)
+        tmp_path = self.path.with_name(f"{self.path.name}.{uuid4().hex}.tmp")
+        try:
+            tmp_path.write_text(payload, encoding="utf-8", newline="\n")
+            tmp_path.replace(self.path)
+        finally:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                log.warning("Failed to remove temporary bindings file: %s", tmp_path, exc_info=True)
 
     def _chat_key(self, max_chat_id: Any) -> str:
         return str(max_chat_id)
