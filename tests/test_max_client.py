@@ -1,5 +1,6 @@
 """Tests for app/max_client.py — OpCode enum and _parse_message."""
 
+import asyncio
 import pytest
 from unittest.mock import AsyncMock
 from app.max_client import MaxClient, MaxMessage, OpCode
@@ -294,6 +295,10 @@ class TestMaxClientInit:
         assert c1.chat_ids == [1, 2]
         assert c2.chat_ids == []
 
+    def test_forward_self_chat_ids_stored(self):
+        c = MaxClient(token="tok", device_id="dev", forward_self_chat_ids={3, 4})
+        assert set(c.forward_self_chat_ids) == {3, 4}
+
 
 class TestAuthSnapshot:
     @pytest.mark.asyncio
@@ -308,6 +313,67 @@ class TestAuthSnapshot:
         assert opcode == OpCode.AUTH_SNAPSHOT
         assert payload["chatsCount"] == MaxClient.AUTH_CHATS_COUNT
         assert payload["chatsCount"] > 10
+
+
+class TestDispatchFiltering:
+    def _dispatch_payload(self, chat_id, sender=99):
+        return {
+            "opcode": OpCode.DISPATCH,
+            "cmd": 0,
+            "seq": 1,
+            "payload": {
+                "chatId": chat_id,
+                "message": {
+                    "id": "m1",
+                    "sender": sender,
+                    "text": "Hello",
+                },
+            },
+        }
+
+    @pytest.mark.asyncio
+    async def test_forward_self_chat_bypasses_regular_allowlist(self):
+        client = MaxClient(token="tok", device_id="dev", chat_ids="1", forward_self_chat_ids={2})
+        client._my_id = 99
+        callback = AsyncMock()
+        client.on_message(callback)
+
+        await client._handle(self._dispatch_payload(2, sender=99))
+        await asyncio.sleep(0)
+
+        callback.assert_awaited_once()
+        assert callback.await_args.args[0].chat_id == 2
+        assert callback.await_args.args[0].is_self is True
+
+    @pytest.mark.asyncio
+    async def test_non_self_forward_self_chat_does_not_bypass_regular_allowlist(self):
+        client = MaxClient(token="tok", device_id="dev", chat_ids="1", forward_self_chat_ids={2})
+        client._my_id = 99
+        callback = AsyncMock()
+        client.on_message(callback)
+
+        await client._handle(self._dispatch_payload(2, sender=55))
+        await asyncio.sleep(0)
+
+        callback.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_forward_self_chat_still_respects_exclude_list(self):
+        client = MaxClient(
+            token="tok",
+            device_id="dev",
+            chat_ids="1",
+            exclude_chat_ids="2",
+            forward_self_chat_ids={2},
+        )
+        client._my_id = 99
+        callback = AsyncMock()
+        client.on_message(callback)
+
+        await client._handle(self._dispatch_payload(2, sender=99))
+        await asyncio.sleep(0)
+
+        callback.assert_not_awaited()
 
 
 class TestMaskSensitive:

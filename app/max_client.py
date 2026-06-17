@@ -96,6 +96,7 @@ class MaxClient:
         device_id: str,
         chat_ids: str | None = None,
         exclude_chat_ids: str | None = None,
+        forward_self_chat_ids: list[int] | set[int] | None = None,
         debug: bool = False,
     ):
         self.token = token
@@ -118,6 +119,7 @@ class MaxClient:
             self.chat_ids.extend(map(int, map(str.strip, chat_ids.split(','))))
         if exclude_chat_ids:
             self.exclude_chat_ids.extend(map(int, map(str.strip, exclude_chat_ids.split(','))))
+        self.forward_self_chat_ids: list[int] = list(forward_self_chat_ids or [])
 
     # ── decorator API ──────────────────────────────────────────────
 
@@ -340,7 +342,7 @@ class MaxClient:
 
                 if self._on_message_cb:
                     msg = self._parse_message(payload)
-                    if msg is not None and (((not self.chat_ids) or (msg.chat_id in self.chat_ids)) and (msg.chat_id not in self.exclude_chat_ids)):
+                    if msg is not None and self._is_dispatch_message_allowed(msg):
                         task = asyncio.create_task(self._on_message_cb(msg))
                         task.add_done_callback(_log_task_exception)
 
@@ -405,6 +407,23 @@ class MaxClient:
                 await session.close()
         return None
 
+
+    @staticmethod
+    def _chat_id_matches(chat_id: Any, chat_ids: list[int]) -> bool:
+        try:
+            normalized_chat_id = int(chat_id)
+        except (TypeError, ValueError):
+            return False
+        return normalized_chat_id in chat_ids
+
+    def _is_dispatch_message_allowed(self, msg: MaxMessage) -> bool:
+        if self._chat_id_matches(msg.chat_id, self.exclude_chat_ids):
+            return False
+
+        if not self.chat_ids or self._chat_id_matches(msg.chat_id, self.chat_ids):
+            return True
+
+        return msg.is_self and self._chat_id_matches(msg.chat_id, self.forward_self_chat_ids)
 
     @staticmethod
     def _mask_sensitive(text: str) -> str:
