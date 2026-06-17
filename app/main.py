@@ -78,13 +78,13 @@ async def main():
 
     sender = TelegramSender(settings.tg_bot_token, settings.tg_admin_id, proxy_url=settings.tg_proxy)
     await sender.start()
-    router = ChatRouter(sender, store, settings.tg_admin_id, reply_enabled=settings.reply_enabled)
+    router = ChatRouter(sender, store, settings.tg_admin_id)
     await router.start()
 
     client = create_max_client(
         settings.max_token, settings.max_device_id, sender, router, settings.max_chat_ids,
         settings.max_exclude_chat_ids,
-        debug=settings.debug, reply_enabled=settings.reply_enabled,
+        debug=settings.debug,
     )
 
     tg_app = build_tg_app(
@@ -92,7 +92,6 @@ async def main():
         client,
         router,
         settings.tg_admin_id,
-        reply_enabled=settings.reply_enabled,
         proxy_url=settings.tg_proxy,
     )
     await tg_app.initialize()
@@ -101,10 +100,7 @@ async def main():
         drop_pending_updates=True,
         allowed_updates=Update.ALL_TYPES,
     )
-    if settings.reply_enabled:
-        log.info("Telegram polling started (admin UI + reply → Max enabled)")
-    else:
-        log.info("Telegram polling started (admin UI enabled, reply → Max disabled)")
+    log.info("Telegram polling started (admin UI + topic messages → Max enabled)")
 
     log.info("Starting Max listener...")
     try:

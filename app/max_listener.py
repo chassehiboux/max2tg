@@ -6,7 +6,7 @@ from html import escape
 from app.chat_router import ChatRouter
 from app.max_client import MaxClient, MaxMessage
 from app.resolver import ContactResolver
-from app.tg_sender import TelegramSender, reply_keyboard
+from app.tg_sender import TelegramSender
 
 log = logging.getLogger(__name__)
 
@@ -370,7 +370,7 @@ def _human_size(n: int) -> str:
 
 def create_max_client(
     max_token: str, max_device_id: str, sender: TelegramSender, router: ChatRouter, max_chat_ids: str | None = None,
-    max_exclude_chat_ids: str | None = None, debug: bool = False, reply_enabled: bool = False,
+    max_exclude_chat_ids: str | None = None, debug: bool = False,
 ) -> MaxClient:
     client = MaxClient(
         token=max_token,
@@ -402,7 +402,7 @@ def create_max_client(
             chat_name = binding.get("max_chat_title") or chat_name
         chat_label = escape(chat_name)
         header_text = _header(msg, sender_label, chat_label, is_dm)
-        kb = reply_keyboard(msg.chat_id, msg.message_id) if reply_enabled else None
+        kb = None
 
         link = msg.link
         link_type = link.get("type") if isinstance(link, dict) else None

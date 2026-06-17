@@ -38,12 +38,10 @@ class ChatRouter:
         sender,
         store: ChatBindingsStore,
         admin_id: int,
-        reply_enabled: bool,
     ):
         self.sender = sender
         self.store = store
         self.admin_id = admin_id
-        self.reply_enabled = reply_enabled
         self._deliver_callback: DeliverCallback | None = None
         self._probe_task: asyncio.Task | None = None
         self._initial_snapshot_seen = False

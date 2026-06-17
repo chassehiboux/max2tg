@@ -9,20 +9,8 @@ from app.chat_bindings import STATE_BOUND, STATE_MUTED, STATE_PENDING_BOT, ChatB
 from app.chat_router import ChatRouter
 from app.tg_handler import (
     PENDING_FORUM_REQUEST_ID_KEY,
-    PENDING_REPLY_KEY,
-    PENDING_REPLY_LABEL_KEY,
-    PENDING_REPLY_MODE_KEY,
-    PENDING_REPLY_PROMPT_CHAT_ID_KEY,
-    PENDING_REPLY_PROMPT_MESSAGE_ID_KEY,
-    PENDING_REPLY_SOURCE_CHAT_ID_KEY,
-    PENDING_REPLY_SOURCE_HTML_KEY,
-    PENDING_REPLY_SOURCE_KIND_KEY,
-    PENDING_REPLY_SOURCE_MAX_MESSAGE_ID_KEY,
-    PENDING_REPLY_SOURCE_MESSAGE_ID_KEY,
     _on_chat_shared,
     _on_forum_button,
-    _on_reply_button,
-    _on_text_reply,
     _on_toggle_tracking_button,
     _on_topic_button,
     _on_topic_text,
@@ -39,7 +27,7 @@ def _make_router(tmp_path, *, forum_ok=True, topic_id=77):
     sender.create_forum_topic = AsyncMock(return_value=SimpleNamespace(message_thread_id=topic_id))
     sender.edit_forum_topic = AsyncMock(return_value=True)
     store = ChatBindingsStore(tmp_path / "chat-bindings.json")
-    router = ChatRouter(sender, store, admin_id=ADMIN_ID, reply_enabled=True)
+    router = ChatRouter(sender, store, admin_id=ADMIN_ID)
     return router, sender
 
 
@@ -51,7 +39,6 @@ def _make_context(tmp_path, *, user_data=None, forum_ok=True, max_client=None):
         "admin_id": ADMIN_ID,
         "chat_router": router,
         "max_client": max_client,
-        "reply_enabled": True,
     }
     ctx.bot = MagicMock()
     ctx.bot.delete_message = AsyncMock()
@@ -159,71 +146,6 @@ def _make_chat_shared_update(request_id: int, *, tg_forum_chat_id=-100500, title
     update.effective_user = MagicMock()
     update.effective_user.id = user_id
     return update
-
-
-class TestReplyFlow:
-    @pytest.mark.asyncio
-    async def test_reply_button_stores_reply_state_and_prompts(self, tmp_path):
-        query = _make_callback_query("reply:42:999", message_text="First line\nSecond line", message_id=321)
-        update = _make_update_with_query(query)
-        ctx, _, _ = _make_context(tmp_path)
-
-        await _on_reply_button(update, ctx)
-
-        assert ctx.user_data[PENDING_REPLY_KEY] == 42
-        assert ctx.user_data[PENDING_REPLY_MODE_KEY] == "reply"
-        assert ctx.user_data[PENDING_REPLY_LABEL_KEY] == "First line"
-        assert ctx.user_data[PENDING_REPLY_SOURCE_CHAT_ID_KEY] == -100
-        assert ctx.user_data[PENDING_REPLY_SOURCE_MESSAGE_ID_KEY] == 321
-        assert ctx.user_data[PENDING_REPLY_SOURCE_MAX_MESSAGE_ID_KEY] == "999"
-        assert ctx.user_data[PENDING_REPLY_SOURCE_HTML_KEY] == "First line\nSecond line"
-        assert ctx.user_data[PENDING_REPLY_SOURCE_KIND_KEY] == "text"
-        assert ctx.user_data[PENDING_REPLY_PROMPT_CHAT_ID_KEY] == -100
-        assert ctx.user_data[PENDING_REPLY_PROMPT_MESSAGE_ID_KEY] == 555
-        query.message.reply_text.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_reply_button_rejects_non_admin(self, tmp_path):
-        query = _make_callback_query("reply:42:999")
-        update = _make_update_with_query(query, user_id=999)
-        ctx, _, _ = _make_context(tmp_path)
-
-        await _on_reply_button(update, ctx)
-
-        query.message.reply_text.assert_not_called()
-        query.answer.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_text_reply_sends_reply_link_to_max_without_deleting_owner_message(self, tmp_path):
-        max_client = MagicMock()
-        max_client.send_message = AsyncMock(return_value={"ok": True})
-        ctx, _, _ = _make_context(
-            tmp_path,
-            user_data={
-                PENDING_REPLY_KEY: 42,
-                PENDING_REPLY_LABEL_KEY: "Chat",
-                PENDING_REPLY_MODE_KEY: "reply",
-                PENDING_REPLY_SOURCE_CHAT_ID_KEY: -100,
-                PENDING_REPLY_SOURCE_MESSAGE_ID_KEY: 111,
-                PENDING_REPLY_SOURCE_MAX_MESSAGE_ID_KEY: "12345",
-                PENDING_REPLY_SOURCE_HTML_KEY: "Line1",
-                PENDING_REPLY_SOURCE_KIND_KEY: "text",
-                PENDING_REPLY_PROMPT_CHAT_ID_KEY: -100,
-                PENDING_REPLY_PROMPT_MESSAGE_ID_KEY: 555,
-            },
-            max_client=max_client,
-        )
-        update = _make_message_update("Hello", chat_type="group")
-
-        await _on_text_reply(update, ctx)
-
-        max_client.send_message.assert_called_once_with(
-            42,
-            "Hello",
-            [],
-            link={"type": "REPLY", "messageId": 12345},
-        )
-        ctx.bot.delete_message.assert_awaited_once_with(chat_id=-100, message_id=555)
 
 
 class TestAdminForum:

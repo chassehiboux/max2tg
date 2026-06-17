@@ -16,7 +16,7 @@ def _make_router(tmp_path, *, forum_ok=True, topic_id=777):
     sender.create_forum_topic = AsyncMock(return_value=SimpleNamespace(message_thread_id=topic_id))
     sender.edit_forum_topic = AsyncMock(return_value=True)
     store = ChatBindingsStore(tmp_path / "chat-bindings.json")
-    router = ChatRouter(sender, store, admin_id=1, reply_enabled=True)
+    router = ChatRouter(sender, store, admin_id=1)
     return router, sender
 
 

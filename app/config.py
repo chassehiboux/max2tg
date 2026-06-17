@@ -16,7 +16,6 @@ class Settings:
     max_exclude_chat_ids: str | None = None
     tg_proxy: str | None = None
     debug: bool = False
-    reply_enabled: bool = False
 
 
 def _extract_max_token(raw_value: str) -> str:
@@ -73,5 +72,4 @@ def load_settings() -> Settings:
         max_exclude_chat_ids=os.environ.get("MAX_EXCLUDE_CHAT_IDS") or None,
         tg_proxy=os.environ.get("TG_PROXY") or None,
         debug=os.environ.get("DEBUG", "").lower() in ("1", "true", "yes"),
-        reply_enabled=os.environ.get("REPLY_ENABLED", "").lower() in ("1", "true", "yes"),
     )

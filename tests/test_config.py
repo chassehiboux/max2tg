@@ -36,7 +36,6 @@ class TestSettingsDataclass:
             tg_admin_id=1,
         )
         assert settings.debug is False
-        assert settings.reply_enabled is False
         assert settings.max_chat_ids is None
         assert settings.max_exclude_chat_ids is None
 
@@ -68,15 +67,6 @@ class TestLoadSettingsValid:
     def test_debug_false_values(self, value):
         settings = _load_settings_with_env(_env(DEBUG=value))
         assert settings.debug is False
-
-    @pytest.mark.parametrize("value", ["1", "true", "yes"])
-    def test_reply_enabled_true_values(self, value):
-        settings = _load_settings_with_env(_env(REPLY_ENABLED=value))
-        assert settings.reply_enabled is True
-
-    def test_reply_enabled_false_by_default(self):
-        settings = _load_settings_with_env(_env())
-        assert settings.reply_enabled is False
 
     def test_optional_max_chat_ids(self):
         settings = _load_settings_with_env(_env(MAX_CHAT_IDS="-123,-456"))

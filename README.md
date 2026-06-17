@@ -77,7 +77,6 @@ cp .env.example .env
 | `TG_BOT_TOKEN`  | да           | Токен Telegram-бота                            |
 | `TG_ADMIN_ID`   | да           | Telegram user ID владельца бота                |
 | `DEBUG`         | нет          | `true` — подробные логи + дамп JSON в `debug/` |
-| `REPLY_ENABLED` | нет          | `true` — разрешить ответы из Telegram в Max    |
 | `LOG_DIR`       | нет          | Путь к директории логов (по умолчанию `logs`)  |
 | `TG_PROXY`      | нет          | SOCKS5-прокси для Telegram (`socks5://host:port`) |
 
@@ -229,13 +228,13 @@ sudo journalctl -u max2tg -f
 Max (WebSocket) ──→ max2tg ──→ [SOCKS5 proxy] ──→ Telegram Bot ──→ Личка владельца
                        │                                              │
                        ├──────────────────────────────────────────────→ Telegram-форум → топики MAX-чатов
-                       └────────── (если REPLY_ENABLED) ──────────────┘
+Telegram-форум ←── сообщения владельца / reply ── max2tg ────────────→ Max
 ```
 
 1. Приложение подключается к Max через WebSocket как ваш аккаунт
 2. Технические сообщения приходят владельцу в личку, а рабочие сообщения уходят в топики выбранного Telegram-форума
 3. Если форум или топик временно недоступен, сообщения копятся локально и дозаливаются после восстановления доступа
-4. Если `REPLY_ENABLED=true`, владелец может писать в топике обычные сообщения в MAX или делать Telegram reply на пересланное сообщение, чтобы отправить reply в MAX
+4. Владелец может писать в топике обычные сообщения в MAX или делать Telegram reply на пересланное сообщение, чтобы отправить reply в MAX
 
 ## Структура проекта
 
@@ -354,7 +353,6 @@ cp .env.example .env
 | `TG_BOT_TOKEN` | yes | Telegram bot token |
 | `TG_ADMIN_ID` | yes | Telegram user ID of the bot owner |
 | `DEBUG` | no | `true` — verbose logs + JSON dumps to `debug/` |
-| `REPLY_ENABLED` | no | `true` — enable replies from Telegram to Max |
 | `LOG_DIR` | no | Log directory path (default: `logs`) |
 | `TG_PROXY` | no | SOCKS5 proxy for Telegram (`socks5://host:port`) |
 
@@ -506,13 +504,13 @@ sudo journalctl -u max2tg -f
 Max (WebSocket) ──→ max2tg ──→ [SOCKS5 proxy] ──→ Telegram Bot ──→ Owner DM
                        │                                              │
                        ├──────────────────────────────────────────────→ Telegram forum → Max chat topics
-                       └────────── (if REPLY_ENABLED) ────────────────┘
+Telegram forum ←── owner messages / replies ─── max2tg ──────────────→ Max
 ```
 
 1. The app connects to Max via WebSocket using your account credentials
 2. Technical messages go to the owner's DM, and work messages go to topics in the selected Telegram forum
 3. If the forum or topic is temporarily unavailable, incoming Max messages are queued locally and replayed after access appears
-4. If `REPLY_ENABLED=true`, the owner can send plain topic messages to Max or reply to a forwarded message to create a Max reply
+4. The owner can send plain topic messages to Max or reply to a forwarded message to create a Max reply
 
 ## Project Structure
 

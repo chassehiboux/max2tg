@@ -14,7 +14,7 @@ def _make_client(tmp_path):
     sender.send_admin = AsyncMock()
     sender.can_access_chat = AsyncMock(return_value=False)
     store = ChatBindingsStore(tmp_path / "chat-bindings.json")
-    router = ChatRouter(sender, store, admin_id=1, reply_enabled=False)
+    router = ChatRouter(sender, store, admin_id=1)
     client = create_max_client(
         max_token="tok",
         max_device_id="dev",
