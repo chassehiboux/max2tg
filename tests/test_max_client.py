@@ -295,6 +295,21 @@ class TestMaxClientInit:
         assert c2.chat_ids == []
 
 
+class TestAuthSnapshot:
+    @pytest.mark.asyncio
+    async def test_handshake_requests_extended_chat_snapshot(self):
+        client = MaxClient(token="tok", device_id="dev")
+        client._send = AsyncMock(return_value=123)
+
+        await client._handle({"opcode": OpCode.HANDSHAKE, "cmd": 1, "seq": 0, "payload": {}})
+
+        client._send.assert_awaited_once()
+        opcode, payload = client._send.await_args.args
+        assert opcode == OpCode.AUTH_SNAPSHOT
+        assert payload["chatsCount"] == MaxClient.AUTH_CHATS_COUNT
+        assert payload["chatsCount"] > 10
+
+
 class TestMaskSensitive:
     def test_masks_token_field_in_json(self):
         text = '{"token":"secret-value","x":1}'

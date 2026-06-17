@@ -45,6 +45,7 @@ class ChatRouter:
         self._deliver_callback: DeliverCallback | None = None
         self._probe_task: asyncio.Task | None = None
         self._initial_snapshot_seen = False
+        self._topic_locks: dict[str, asyncio.Lock] = {}
 
     def set_delivery_callback(self, callback: DeliverCallback) -> None:
         self._deliver_callback = callback
@@ -280,7 +281,23 @@ class ChatRouter:
             return ok, error_text
         return bool(result), None if result else "Форум Telegram недоступен или у бота нет прав."
 
+    def _topic_lock_for(self, max_chat_id: Any) -> asyncio.Lock:
+        key = str(max_chat_id)
+        lock = self._topic_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._topic_locks[key] = lock
+        return lock
+
     async def _ensure_topic(self, binding: dict[str, Any]) -> dict[str, Any]:
+        max_chat_id = binding.get("max_chat_id")
+        async with self._topic_lock_for(max_chat_id):
+            refreshed = self.store.get_chat(max_chat_id)
+            if refreshed is not None:
+                binding = refreshed
+            return await self._ensure_topic_locked(binding)
+
+    async def _ensure_topic_locked(self, binding: dict[str, Any]) -> dict[str, Any]:
         if binding.get("state") == STATE_MUTED:
             return binding
 

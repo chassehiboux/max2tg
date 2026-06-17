@@ -1,5 +1,6 @@
 """Tests for app/chat_bindings.py and app/chat_router.py."""
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -71,6 +72,29 @@ class TestChatRouter:
         assert router.store.get_chat(42)["tg_topic_id"] == 777
         assert router.store.get_chat(43)["tg_topic_id"] == 777
         assert sender.create_forum_topic.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_concurrent_topic_creation_for_same_chat_is_serialized(self, tmp_path):
+        router, sender = _make_router(tmp_path, topic_id=77)
+        router.store.ensure_chat(42, "Chat A", "GROUP")
+        router.store.set_forum(-100500, "Work Forum")
+        router.store.mark_forum_available(True)
+
+        async def create_topic(chat_id, name):
+            await asyncio.sleep(0.01)
+            return SimpleNamespace(message_thread_id=77)
+
+        sender.create_forum_topic = AsyncMock(side_effect=create_topic)
+
+        await asyncio.gather(
+            router.create_or_refresh_topic(42),
+            router.create_or_refresh_topic(42),
+        )
+
+        binding = router.store.get_chat(42)
+        assert binding["state"] == STATE_BOUND
+        assert binding["tg_topic_id"] == 77
+        sender.create_forum_topic.assert_awaited_once_with(-100500, "Chat A")
 
     @pytest.mark.asyncio
     async def test_route_payload_queues_when_forum_unavailable(self, tmp_path):

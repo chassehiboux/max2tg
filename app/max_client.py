@@ -88,6 +88,7 @@ class MaxClient:
     HEARTBEAT_SEC = 30
     RECONNECT_SEC = 5
     AUTH_TIMEOUT_SEC = 10
+    AUTH_CHATS_COUNT = 100
 
     def __init__(
         self,
@@ -313,7 +314,7 @@ class MaxClient:
                 seq = await self._send(
                     OpCode.AUTH_SNAPSHOT,
                     {
-                        "chatsCount": 10,
+                        "chatsCount": self.AUTH_CHATS_COUNT,
                         "interactive": True,
                         "token": self.token,
                     },
