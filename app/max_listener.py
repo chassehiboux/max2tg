@@ -24,10 +24,16 @@ def _sent_messages(result) -> list:
     return []
 
 
-def _header(msg: MaxMessage, sender_label: str, chat_label: str, is_dm: bool) -> str:
-    if is_dm:
-        return f"✉ <b>{sender_label}</b>"
-    return f"💬 <b>{chat_label}</b> | {sender_label}"
+def _header(sender_label: str | None) -> str:
+    if not sender_label:
+        return ""
+    return f"💬 <b><i>{sender_label}</i></b>"
+
+
+def _with_header(header_text: str, body_text: str) -> str:
+    if not header_text:
+        return body_text
+    return f"{header_text}\n{body_text}"
 
 
 def _is_resolved_chat_title(title) -> bool:
@@ -132,7 +138,7 @@ async def _send_attach(
             return _sent_messages(result)
         result = await sender.send_text(
             target_chat_id,
-            f"{header_text}\n<i>[фото — не удалось загрузить]</i>",
+            _with_header(header_text, "<i>[фото — не удалось загрузить]</i>"),
             reply_markup=kb,
             raise_on_failure=True,
             message_thread_id=target_thread_id,
@@ -147,7 +153,7 @@ async def _send_attach(
                 result = await sender.send_photo(
                     target_chat_id,
                     data,
-                    caption=f"{header_text}\n<i>[видео — превью]</i>",
+                    caption=_with_header(header_text, "<i>[видео — превью]</i>"),
                     reply_markup=kb,
                     raise_on_failure=True,
                     message_thread_id=target_thread_id,
@@ -155,7 +161,7 @@ async def _send_attach(
                 return _sent_messages(result)
         result = await sender.send_text(
             target_chat_id,
-            f"{header_text}\n<i>[видео]</i>",
+            _with_header(header_text, "<i>[видео]</i>"),
             reply_markup=kb,
             raise_on_failure=True,
             message_thread_id=target_thread_id,
@@ -204,7 +210,7 @@ async def _send_attach(
         size_str = f" ({_human_size(size)})" if size else ""
         result = await sender.send_text(
             target_chat_id,
-            f"{header_text}\n📎 <b>{escape(name)}</b>{size_str}",
+            _with_header(header_text, f"📎 <b>{escape(name)}</b>{size_str}"),
             reply_markup=kb,
             raise_on_failure=True,
             message_thread_id=target_thread_id,
@@ -227,7 +233,7 @@ async def _send_attach(
                 return _sent_messages(result)
         result = await sender.send_text(
             target_chat_id,
-            f"{header_text}\n<i>[аудио]</i>",
+            _with_header(header_text, "<i>[аудио]</i>"),
             reply_markup=kb,
             raise_on_failure=True,
             message_thread_id=target_thread_id,
@@ -249,7 +255,7 @@ async def _send_attach(
                 return _sent_messages(result)
         result = await sender.send_text(
             target_chat_id,
-            f"{header_text}\n<i>[стикер]</i>",
+            _with_header(header_text, "<i>[стикер]</i>"),
             reply_markup=kb,
             raise_on_failure=True,
             message_thread_id=target_thread_id,
@@ -260,7 +266,7 @@ async def _send_attach(
         share_url = attach.get("url", "")
         title = attach.get("title", "")
         desc = attach.get("description", "")
-        parts = [header_text]
+        parts = [part for part in (header_text,) if part]
         if title:
             parts.append(f"🔗 <b>{escape(title)}</b>")
         if share_url:
@@ -282,7 +288,7 @@ async def _send_attach(
         if lat and lon:
             result = await sender.send_text(
                 target_chat_id,
-                f"{header_text}\n📍 {lat}, {lon}",
+                _with_header(header_text, f"📍 {lat}, {lon}"),
                 reply_markup=kb,
                 raise_on_failure=True,
                 message_thread_id=target_thread_id,
@@ -290,7 +296,7 @@ async def _send_attach(
         else:
             result = await sender.send_text(
                 target_chat_id,
-                f"{header_text}\n<i>[геолокация]</i>",
+                _with_header(header_text, "<i>[геолокация]</i>"),
                 reply_markup=kb,
                 raise_on_failure=True,
                 message_thread_id=target_thread_id,
@@ -300,7 +306,7 @@ async def _send_attach(
     if atype == "CONTACT":
         name = attach.get("name", "")
         phone = attach.get("phone", "")
-        text = f"{header_text}\n👤 {escape(name)}"
+        text = _with_header(header_text, f"👤 {escape(name)}")
         if phone:
             text += f" — {escape(phone)}"
         result = await sender.send_text(
@@ -315,7 +321,7 @@ async def _send_attach(
     log.info("Unknown attach type %s, sending as info", atype)
     result = await sender.send_text(
         target_chat_id,
-        f"{header_text}\n<i>[вложение: {escape(atype or 'unknown')}]</i>",
+        _with_header(header_text, f"<i>[вложение: {escape(atype or 'unknown')}]</i>"),
         reply_markup=kb,
         raise_on_failure=True,
         message_thread_id=target_thread_id,
@@ -354,7 +360,7 @@ async def _handle_linked_message(
         if fwd_sender_label:
             prefix = f"↩ <b>Ответ на {fwd_sender_label}</b>"
 
-    full_header = f"{header_text}\n{prefix}"
+    full_header = _with_header(header_text, prefix)
 
     fwd_meaningful = [
         a for a in fwd_attaches
@@ -365,7 +371,7 @@ async def _handle_linked_message(
         text_sent = False
         for i, attach in enumerate(fwd_meaningful):
             if i == 0 and fwd_text:
-                cap = f"{full_header}\n{escape(fwd_text)}"
+                cap = _with_header(full_header, escape(fwd_text))
                 text_sent = True
             else:
                 cap = full_header
@@ -376,7 +382,7 @@ async def _handle_linked_message(
         if fwd_text and not text_sent:
             result = await sender.send_text(
                 target_chat_id,
-                f"{full_header}\n{escape(fwd_text)}",
+                _with_header(full_header, escape(fwd_text)),
                 reply_markup=kb,
                 raise_on_failure=True,
                 message_thread_id=target_thread_id,
@@ -385,7 +391,7 @@ async def _handle_linked_message(
     elif fwd_text:
         result = await sender.send_text(
             target_chat_id,
-            f"{full_header}\n{escape(fwd_text)}",
+            _with_header(full_header, escape(fwd_text)),
             reply_markup=kb,
             raise_on_failure=True,
             message_thread_id=target_thread_id,
@@ -394,7 +400,7 @@ async def _handle_linked_message(
     else:
         result = await sender.send_text(
             target_chat_id,
-            f"{full_header}\n<i>[без содержимого]</i>",
+            _with_header(full_header, "<i>[без содержимого]</i>"),
             reply_markup=kb,
             raise_on_failure=True,
             message_thread_id=target_thread_id,
@@ -443,15 +449,10 @@ def create_max_client(
         if msg.is_self and not _is_allowed_self_message(msg, forward_self_chat_ids):
             return
 
-        sender_label = escape(await resolver.resolve_user(msg.sender_id))
-        is_dm = resolver.is_dm(msg.chat_id)
-        chat_name = resolver.chat_name(msg.chat_id)
-        if is_dm and not _is_resolved_chat_title(chat_name):
-            chat_name = binding.get("max_chat_title") or chat_name
-        elif chat_name == str(msg.chat_id):
-            chat_name = binding.get("max_chat_title") or chat_name
-        chat_label = escape(chat_name)
-        header_text = _header(msg, sender_label, chat_label, is_dm)
+        sender_label = None
+        if msg.sender_id is not None:
+            sender_label = escape(await resolver.resolve_user(msg.sender_id))
+        header_text = _header(sender_label)
         kb = None
 
         link = msg.link
@@ -473,7 +474,7 @@ def create_max_client(
             if msg.text:
                 result = await sender.send_text(
                     target_chat_id,
-                    f"{header_text}\n{escape(msg.text)}",
+                    _with_header(header_text, escape(msg.text)),
                     reply_markup=kb,
                     raise_on_failure=True,
                     message_thread_id=target_thread_id,
@@ -492,7 +493,7 @@ def create_max_client(
             text_sent = False
             for i, attach in enumerate(meaningful_attaches):
                 if i == 0 and msg.text:
-                    cap = f"{header_text}\n{escape(msg.text)}"
+                    cap = _with_header(header_text, escape(msg.text))
                     text_sent = True
                 else:
                     cap = header_text
@@ -504,7 +505,7 @@ def create_max_client(
             if msg.text and not text_sent:
                 result = await sender.send_text(
                     target_chat_id,
-                    f"{header_text}\n{escape(msg.text)}",
+                    _with_header(header_text, escape(msg.text)),
                     reply_markup=kb,
                     raise_on_failure=True,
                     message_thread_id=target_thread_id,
@@ -514,7 +515,7 @@ def create_max_client(
             body = escape(msg.text) if msg.text else "<i>[нетекстовое сообщение]</i>"
             result = await sender.send_text(
                 target_chat_id,
-                f"{header_text}\n{body}",
+                _with_header(header_text, body),
                 reply_markup=kb,
                 raise_on_failure=True,
                 message_thread_id=target_thread_id,

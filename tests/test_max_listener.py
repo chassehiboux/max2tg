@@ -4,10 +4,31 @@ import pytest
 from app.max_client import MaxMessage
 from app.max_listener import (
     _guess_media_kind,
+    _header,
     _human_size,
     _is_allowed_self_message,
     _parse_chat_id_set,
+    _with_header,
 )
+
+
+# ---------------------------------------------------------------------------
+# Telegram message formatting
+# ---------------------------------------------------------------------------
+
+class TestTelegramMessageFormatting:
+    def test_header_uses_only_sender_name_in_bold_italic(self):
+        assert _header("Анна &amp; Ко") == "💬 <b><i>Анна &amp; Ко</i></b>"
+
+    def test_header_is_empty_without_sender_name(self):
+        assert _header(None) == ""
+        assert _header("") == ""
+
+    def test_body_gets_header_when_present(self):
+        assert _with_header("💬 <b><i>Анна</i></b>", "Привет") == "💬 <b><i>Анна</i></b>\nПривет"
+
+    def test_body_has_no_blank_prefix_without_header(self):
+        assert _with_header("", "Привет") == "Привет"
 
 
 # ---------------------------------------------------------------------------
