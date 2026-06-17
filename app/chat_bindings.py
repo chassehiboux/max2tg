@@ -16,10 +16,11 @@ STATE_MUTED = "muted"
 STATE_PENDING_BOT = "pending_bot"
 
 TRACKING_STATES = {STATE_UNCONFIGURED, STATE_BOUND, STATE_MUTED, STATE_PENDING_BOT}
+MESSAGE_LINK_LIMIT = 1000
 
 
 class ChatBindingsStore:
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -36,14 +37,44 @@ class ChatBindingsStore:
             log.warning("Failed to load chat bindings from %s", self.path, exc_info=True)
             return self._default_data()
 
-        chats = raw.get("chats") if isinstance(raw, dict) else None
+        if not isinstance(raw, dict):
+            return self._default_data()
+
+        chats = raw.get("chats")
         if not isinstance(chats, dict):
             return self._default_data()
 
-        return {"version": self.VERSION, "chats": chats}
+        data = {
+            "version": self.VERSION,
+            "forum": self._normalize_forum(raw.get("forum")),
+            "chats": {},
+        }
+        for key, binding in chats.items():
+            if isinstance(binding, dict):
+                data["chats"][str(key)] = self._normalize_chat_record(binding)
+        return data
 
     def _default_data(self) -> dict[str, Any]:
-        return {"version": self.VERSION, "chats": {}}
+        return {"version": self.VERSION, "forum": self._default_forum(), "chats": {}}
+
+    @staticmethod
+    def _default_forum() -> dict[str, Any]:
+        return {
+            "tg_forum_chat_id": None,
+            "tg_forum_title": None,
+            "tg_forum_username": None,
+            "is_available": False,
+            "last_error": None,
+            "updated_at": None,
+        }
+
+    def _normalize_forum(self, forum: Any) -> dict[str, Any]:
+        normalized = self._default_forum()
+        if isinstance(forum, dict):
+            for key in normalized:
+                if key in forum:
+                    normalized[key] = forum[key]
+        return normalized
 
     @staticmethod
     def _now() -> str:
@@ -75,10 +106,13 @@ class ChatBindingsStore:
             "max_chat_title": max_chat_title or str(max_chat_id),
             "max_chat_type": max_chat_type,
             "state": STATE_UNCONFIGURED,
-            "tg_chat_id": None,
-            "tg_chat_title": None,
-            "tg_chat_username": None,
+            "tg_forum_chat_id": None,
+            "tg_forum_title": None,
+            "tg_topic_id": None,
+            "tg_topic_name": None,
+            "tg_topic_error": None,
             "pending_messages": [],
+            "message_links": {},
             "new_chat_notified": False,
             "pending_access_notified": False,
             "queue_warning_notified": False,
@@ -86,6 +120,79 @@ class ChatBindingsStore:
             "updated_at": now,
             "created_at": now,
         }
+
+    def _normalize_chat_record(self, binding: dict[str, Any]) -> dict[str, Any]:
+        normalized = self._new_chat_record(
+            binding.get("max_chat_id"),
+            binding.get("max_chat_title") or str(binding.get("max_chat_id")),
+            binding.get("max_chat_type"),
+        )
+        for key in normalized:
+            if key in binding:
+                normalized[key] = binding[key]
+
+        state = normalized.get("state")
+        if state not in TRACKING_STATES:
+            normalized["state"] = STATE_UNCONFIGURED
+
+        if not isinstance(normalized.get("pending_messages"), list):
+            normalized["pending_messages"] = []
+        if not isinstance(normalized.get("message_links"), dict):
+            normalized["message_links"] = {}
+
+        # Old per-group bindings are deliberately not carried forward as delivery routes.
+        normalized["tg_forum_chat_id"] = binding.get("tg_forum_chat_id")
+        normalized["tg_forum_title"] = binding.get("tg_forum_title")
+        normalized["tg_topic_id"] = binding.get("tg_topic_id")
+        normalized["tg_topic_name"] = binding.get("tg_topic_name")
+        normalized["tg_topic_error"] = binding.get("tg_topic_error")
+        if normalized.get("state") == STATE_BOUND and normalized.get("tg_topic_id") is None:
+            normalized["state"] = STATE_UNCONFIGURED
+        return normalized
+
+    def get_forum(self) -> dict[str, Any]:
+        with self._lock:
+            return deepcopy(self._data["forum"])
+
+    def set_forum(
+        self,
+        tg_forum_chat_id: int,
+        tg_forum_title: str | None = None,
+        tg_forum_username: str | None = None,
+    ) -> dict[str, Any]:
+        with self._lock:
+            now = self._now()
+            forum = self._data["forum"]
+            forum["tg_forum_chat_id"] = tg_forum_chat_id
+            forum["tg_forum_title"] = tg_forum_title
+            forum["tg_forum_username"] = tg_forum_username
+            forum["is_available"] = False
+            forum["last_error"] = None
+            forum["updated_at"] = now
+
+            for binding in self._data["chats"].values():
+                if binding.get("state") == STATE_MUTED:
+                    continue
+                if binding.get("tg_forum_chat_id") != tg_forum_chat_id:
+                    binding["tg_forum_chat_id"] = tg_forum_chat_id
+                    binding["tg_forum_title"] = tg_forum_title
+                    binding["tg_topic_id"] = None
+                    binding["tg_topic_name"] = None
+                    binding["tg_topic_error"] = None
+                    binding["state"] = STATE_UNCONFIGURED
+                    binding["updated_at"] = now
+
+            self._save_locked()
+            return deepcopy(forum)
+
+    def mark_forum_available(self, available: bool = True, error_text: str | None = None) -> dict[str, Any]:
+        with self._lock:
+            forum = self._data["forum"]
+            forum["is_available"] = available
+            forum["last_error"] = error_text
+            forum["updated_at"] = self._now()
+            self._save_locked()
+            return deepcopy(forum)
 
     def ensure_chat(
         self,
@@ -99,6 +206,10 @@ class ChatBindingsStore:
             created = key not in chats
             if created:
                 chats[key] = self._new_chat_record(max_chat_id, max_chat_title, max_chat_type)
+                forum = self._data["forum"]
+                if forum.get("tg_forum_chat_id") is not None:
+                    chats[key]["tg_forum_chat_id"] = forum.get("tg_forum_chat_id")
+                    chats[key]["tg_forum_title"] = forum.get("tg_forum_title")
                 self._save_locked()
                 return deepcopy(chats[key]), True
 
@@ -131,16 +242,24 @@ class ChatBindingsStore:
             ),
         )
 
+    def list_active_chats(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return [
+                deepcopy(binding)
+                for binding in self._data["chats"].values()
+                if binding.get("state") != STATE_MUTED
+            ]
+
     def count_by_state(self, state: str) -> int:
         with self._lock:
             return sum(1 for binding in self._data["chats"].values() if binding.get("state") == state)
 
-    def set_binding(
+    def set_topic(
         self,
         max_chat_id: Any,
-        tg_chat_id: int,
-        tg_chat_title: str | None = None,
-        tg_chat_username: str | None = None,
+        tg_forum_chat_id: int,
+        tg_topic_id: int,
+        tg_topic_name: str,
     ) -> dict[str, Any]:
         with self._lock:
             key = self._chat_key(max_chat_id)
@@ -149,10 +268,13 @@ class ChatBindingsStore:
                 binding = self._new_chat_record(max_chat_id, str(max_chat_id), None)
                 self._data["chats"][key] = binding
 
-            binding["tg_chat_id"] = tg_chat_id
-            binding["tg_chat_title"] = tg_chat_title
-            binding["tg_chat_username"] = tg_chat_username
-            binding["state"] = STATE_PENDING_BOT
+            forum = self._data["forum"]
+            binding["tg_forum_chat_id"] = tg_forum_chat_id
+            binding["tg_forum_title"] = forum.get("tg_forum_title")
+            binding["tg_topic_id"] = tg_topic_id
+            binding["tg_topic_name"] = tg_topic_name
+            binding["tg_topic_error"] = None
+            binding["state"] = STATE_BOUND
             binding["pending_access_notified"] = False
             binding["queue_warning_notified"] = False
             binding["last_access_error"] = None
@@ -171,11 +293,20 @@ class ChatBindingsStore:
             self._save_locked()
             return deepcopy(binding)
 
-    def mark_pending_bot(self, max_chat_id: Any, error_text: str | None = None) -> dict[str, Any]:
+    def mark_topic_pending(
+        self,
+        max_chat_id: Any,
+        error_text: str | None = None,
+        clear_topic: bool = False,
+    ) -> dict[str, Any]:
         with self._lock:
             binding = self._data["chats"][self._chat_key(max_chat_id)]
             binding["state"] = STATE_PENDING_BOT
+            if clear_topic:
+                binding["tg_topic_id"] = None
+                binding["tg_topic_name"] = None
             if error_text:
+                binding["tg_topic_error"] = error_text
                 binding["last_access_error"] = error_text
             binding["updated_at"] = self._now()
             self._save_locked()
@@ -192,7 +323,7 @@ class ChatBindingsStore:
     def resume_chat(self, max_chat_id: Any) -> dict[str, Any]:
         with self._lock:
             binding = self._data["chats"][self._chat_key(max_chat_id)]
-            binding["state"] = STATE_PENDING_BOT if binding.get("tg_chat_id") else STATE_UNCONFIGURED
+            binding["state"] = STATE_BOUND if binding.get("tg_topic_id") else STATE_UNCONFIGURED
             binding["pending_access_notified"] = False
             binding["queue_warning_notified"] = False
             binding["last_access_error"] = None
@@ -255,17 +386,48 @@ class ChatBindingsStore:
                 return 0
             return len(binding.get("pending_messages", []))
 
-    def list_pending_bindings(self) -> list[dict[str, Any]]:
-        with self._lock:
-            return [
-                deepcopy(binding)
-                for binding in self._data["chats"].values()
-                if binding.get("state") == STATE_PENDING_BOT and binding.get("tg_chat_id") is not None
-            ]
-
-    def find_by_tg_chat_id(self, tg_chat_id: int) -> dict[str, Any] | None:
+    def find_by_topic(self, tg_forum_chat_id: int, tg_topic_id: int) -> dict[str, Any] | None:
         with self._lock:
             for binding in self._data["chats"].values():
-                if binding.get("tg_chat_id") == tg_chat_id:
+                if (
+                    str(binding.get("tg_forum_chat_id")) == str(tg_forum_chat_id)
+                    and str(binding.get("tg_topic_id")) == str(tg_topic_id)
+                ):
                     return deepcopy(binding)
         return None
+
+    def add_message_link(self, max_chat_id: Any, tg_message_id: int, max_message_id: Any) -> dict[str, Any] | None:
+        if not tg_message_id or max_message_id in (None, ""):
+            return None
+
+        with self._lock:
+            binding = self._data["chats"].get(self._chat_key(max_chat_id))
+            if binding is None:
+                return None
+
+            links = binding.setdefault("message_links", {})
+            links[str(tg_message_id)] = {
+                "max_message_id": str(max_message_id),
+                "linked_at": self._now(),
+            }
+            while len(links) > MESSAGE_LINK_LIMIT:
+                first_key = next(iter(links))
+                links.pop(first_key, None)
+            binding["updated_at"] = self._now()
+            self._save_locked()
+            return deepcopy(binding)
+
+    def find_linked_max_message_id(
+        self,
+        tg_forum_chat_id: int,
+        tg_topic_id: int,
+        tg_message_id: int,
+    ) -> str | None:
+        binding = self.find_by_topic(tg_forum_chat_id, tg_topic_id)
+        if binding is None:
+            return None
+        link = (binding.get("message_links") or {}).get(str(tg_message_id))
+        if not isinstance(link, dict):
+            return None
+        max_message_id = link.get("max_message_id")
+        return str(max_message_id) if max_message_id not in (None, "") else None

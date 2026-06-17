@@ -110,7 +110,8 @@ class TestReconnectNotification:
         snapshot = {"profile": {"id": 1, "names": []}, "chats": []}
         await client._on_ready_cb(snapshot)
         sender.send_admin.assert_called()
-        assert "подключён" in sender.send_admin.call_args[0][0]
+        sent_messages = [call.args[0] for call in sender.send_admin.await_args_list]
+        assert any("подключён" in message for message in sent_messages)
 
     async def test_startup_notification_includes_chat_count(self, tmp_path):
         client, sender = _make_client(tmp_path)

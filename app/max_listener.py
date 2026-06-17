@@ -14,6 +14,16 @@ PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
 
 
+def _sent_messages(result) -> list:
+    if result is None:
+        return []
+    if isinstance(result, list):
+        return [item for item in result if getattr(item, "message_id", None) is not None]
+    if getattr(result, "message_id", None) is not None:
+        return [result]
+    return []
+
+
 def _header(msg: MaxMessage, sender_label: str, chat_label: str, is_dm: bool) -> str:
     if is_dm:
         return f"✉ <b>{sender_label}</b>"
@@ -49,15 +59,16 @@ async def _send_attach(
     client: MaxClient,
     sender: TelegramSender,
     target_chat_id: int,
+    target_thread_id: int,
     header_text: str,
     kb=None,
-) -> bool:
-    """Process and send a single attachment. Returns True if handled."""
+) -> list:
+    """Process and send a single attachment. Returns sent Telegram messages."""
     atype = attach.get("_type", "")
     log.info("Processing attach _type=%s keys=%s", atype, list(attach.keys()))
 
     if atype == "CONTROL" or atype == "WIDGET" or atype == "INLINE_KEYBOARD":
-        return False
+        return []
 
     if atype == "PHOTO":
         url = _extract_photo_url(attach)
@@ -66,31 +77,46 @@ async def _send_attach(
             return False
         data = await client.download_file(url)
         if data:
-            await sender.send_photo(target_chat_id, data, caption=header_text, reply_markup=kb, raise_on_failure=True)
-            return True
-        await sender.send_text(
+            result = await sender.send_photo(
+                target_chat_id,
+                data,
+                caption=header_text,
+                reply_markup=kb,
+                raise_on_failure=True,
+                message_thread_id=target_thread_id,
+            )
+            return _sent_messages(result)
+        result = await sender.send_text(
             target_chat_id,
             f"{header_text}\n<i>[фото — не удалось загрузить]</i>",
             reply_markup=kb,
             raise_on_failure=True,
+            message_thread_id=target_thread_id,
         )
-        return True
+        return _sent_messages(result)
 
     if atype == "VIDEO":
         thumb = attach.get("thumbnail")
         if thumb:
             data = await client.download_file(thumb)
             if data:
-                await sender.send_photo(
+                result = await sender.send_photo(
                     target_chat_id,
                     data,
                     caption=f"{header_text}\n<i>[видео — превью]</i>",
                     reply_markup=kb,
                     raise_on_failure=True,
+                    message_thread_id=target_thread_id,
                 )
-                return True
-        await sender.send_text(target_chat_id, f"{header_text}\n<i>[видео]</i>", reply_markup=kb, raise_on_failure=True)
-        return True
+                return _sent_messages(result)
+        result = await sender.send_text(
+            target_chat_id,
+            f"{header_text}\n<i>[видео]</i>",
+            reply_markup=kb,
+            raise_on_failure=True,
+            message_thread_id=target_thread_id,
+        )
+        return _sent_messages(result)
 
     if atype == "FILE":
         name = attach.get("name", "file")
@@ -101,61 +127,90 @@ async def _send_attach(
             if data:
                 kind = _guess_media_kind(name)
                 if kind == "photo":
-                    await sender.send_photo(
+                    result = await sender.send_photo(
                         target_chat_id,
                         data,
                         caption=header_text,
                         filename=name,
                         reply_markup=kb,
                         raise_on_failure=True,
+                        message_thread_id=target_thread_id,
                     )
                 elif kind == "video":
-                    await sender.send_video(
+                    result = await sender.send_video(
                         target_chat_id,
                         data,
                         caption=header_text,
                         filename=name,
                         reply_markup=kb,
                         raise_on_failure=True,
+                        message_thread_id=target_thread_id,
                     )
                 else:
-                    await sender.send_document(
+                    result = await sender.send_document(
                         target_chat_id,
                         data,
                         caption=header_text,
                         filename=name,
                         reply_markup=kb,
                         raise_on_failure=True,
+                        message_thread_id=target_thread_id,
                     )
-                return True
+                return _sent_messages(result)
         size_str = f" ({_human_size(size)})" if size else ""
-        await sender.send_text(
+        result = await sender.send_text(
             target_chat_id,
             f"{header_text}\n📎 <b>{escape(name)}</b>{size_str}",
             reply_markup=kb,
             raise_on_failure=True,
+            message_thread_id=target_thread_id,
         )
-        return True
+        return _sent_messages(result)
 
     if atype == "AUDIO":
         url = attach.get("url")
         if url:
             data = await client.download_file(url)
             if data:
-                await sender.send_voice(target_chat_id, data, caption=header_text, reply_markup=kb, raise_on_failure=True)
-                return True
-        await sender.send_text(target_chat_id, f"{header_text}\n<i>[аудио]</i>", reply_markup=kb, raise_on_failure=True)
-        return True
+                result = await sender.send_voice(
+                    target_chat_id,
+                    data,
+                    caption=header_text,
+                    reply_markup=kb,
+                    raise_on_failure=True,
+                    message_thread_id=target_thread_id,
+                )
+                return _sent_messages(result)
+        result = await sender.send_text(
+            target_chat_id,
+            f"{header_text}\n<i>[аудио]</i>",
+            reply_markup=kb,
+            raise_on_failure=True,
+            message_thread_id=target_thread_id,
+        )
+        return _sent_messages(result)
 
     if atype == "STICKER":
         url = attach.get("url")
         if url:
             data = await client.download_file(url)
             if data:
-                await sender.send_sticker(target_chat_id, data, reply_markup=kb, raise_on_failure=True)
-                return True
-        await sender.send_text(target_chat_id, f"{header_text}\n<i>[стикер]</i>", reply_markup=kb, raise_on_failure=True)
-        return True
+                result = await sender.send_sticker(
+                    target_chat_id,
+                    data,
+                    reply_markup=kb,
+                    raise_on_failure=True,
+                    message_thread_id=target_thread_id,
+                )
+                return _sent_messages(result)
+        result = await sender.send_text(
+            target_chat_id,
+            f"{header_text}\n<i>[стикер]</i>",
+            reply_markup=kb,
+            raise_on_failure=True,
+            message_thread_id=target_thread_id,
+        )
+        return _sent_messages(result)
 
     if atype == "SHARE":
         share_url = attach.get("url", "")
@@ -168,17 +223,35 @@ async def _send_attach(
             parts.append(escape(share_url))
         if desc:
             parts.append(f"<i>{escape(desc[:200])}</i>")
-        await sender.send_text(target_chat_id, "\n".join(parts), reply_markup=kb, raise_on_failure=True)
-        return True
+        result = await sender.send_text(
+            target_chat_id,
+            "\n".join(parts),
+            reply_markup=kb,
+            raise_on_failure=True,
+            message_thread_id=target_thread_id,
+        )
+        return _sent_messages(result)
 
     if atype == "LOCATION":
         lat = attach.get("lat") or attach.get("latitude")
         lon = attach.get("lon") or attach.get("lng") or attach.get("longitude")
         if lat and lon:
-            await sender.send_text(target_chat_id, f"{header_text}\n📍 {lat}, {lon}", reply_markup=kb, raise_on_failure=True)
+            result = await sender.send_text(
+                target_chat_id,
+                f"{header_text}\n📍 {lat}, {lon}",
+                reply_markup=kb,
+                raise_on_failure=True,
+                message_thread_id=target_thread_id,
+            )
         else:
-            await sender.send_text(target_chat_id, f"{header_text}\n<i>[геолокация]</i>", reply_markup=kb, raise_on_failure=True)
-        return True
+            result = await sender.send_text(
+                target_chat_id,
+                f"{header_text}\n<i>[геолокация]</i>",
+                reply_markup=kb,
+                raise_on_failure=True,
+                message_thread_id=target_thread_id,
+            )
+        return _sent_messages(result)
 
     if atype == "CONTACT":
         name = attach.get("name", "")
@@ -186,17 +259,24 @@ async def _send_attach(
         text = f"{header_text}\n👤 {escape(name)}"
         if phone:
             text += f" — {escape(phone)}"
-        await sender.send_text(target_chat_id, text, reply_markup=kb, raise_on_failure=True)
-        return True
+        result = await sender.send_text(
+            target_chat_id,
+            text,
+            reply_markup=kb,
+            raise_on_failure=True,
+            message_thread_id=target_thread_id,
+        )
+        return _sent_messages(result)
 
     log.info("Unknown attach type %s, sending as info", atype)
-    await sender.send_text(
+    result = await sender.send_text(
         target_chat_id,
         f"{header_text}\n<i>[вложение: {escape(atype or 'unknown')}]</i>",
         reply_markup=kb,
         raise_on_failure=True,
+        message_thread_id=target_thread_id,
     )
-    return True
+    return _sent_messages(result)
 
 
 async def _handle_linked_message(
@@ -206,10 +286,12 @@ async def _handle_linked_message(
     client: MaxClient,
     sender: TelegramSender,
     target_chat_id: int,
+    target_thread_id: int,
     resolver: ContactResolver,
     kb=None,
-) -> None:
+) -> list:
     """Handle FORWARD or REPLY link inside a message."""
+    sent_messages = []
     inner = link.get("message") or link
     fwd_sender_id = inner.get("sender") or link.get("sender")
     fwd_text = inner.get("text", "") or link.get("text", "")
@@ -243,14 +325,39 @@ async def _handle_linked_message(
                 text_sent = True
             else:
                 cap = full_header
-            await _send_attach(attach, client, sender, target_chat_id, cap, kb=kb)
+            sent_messages.extend(
+                await _send_attach(attach, client, sender, target_chat_id, target_thread_id, cap, kb=kb)
+            )
 
         if fwd_text and not text_sent:
-            await sender.send_text(target_chat_id, f"{full_header}\n{escape(fwd_text)}", reply_markup=kb, raise_on_failure=True)
+            result = await sender.send_text(
+                target_chat_id,
+                f"{full_header}\n{escape(fwd_text)}",
+                reply_markup=kb,
+                raise_on_failure=True,
+                message_thread_id=target_thread_id,
+            )
+            sent_messages.extend(_sent_messages(result))
     elif fwd_text:
-        await sender.send_text(target_chat_id, f"{full_header}\n{escape(fwd_text)}", reply_markup=kb, raise_on_failure=True)
+        result = await sender.send_text(
+            target_chat_id,
+            f"{full_header}\n{escape(fwd_text)}",
+            reply_markup=kb,
+            raise_on_failure=True,
+            message_thread_id=target_thread_id,
+        )
+        sent_messages.extend(_sent_messages(result))
     else:
-        await sender.send_text(target_chat_id, f"{full_header}\n<i>[без содержимого]</i>", reply_markup=kb, raise_on_failure=True)
+        result = await sender.send_text(
+            target_chat_id,
+            f"{full_header}\n<i>[без содержимого]</i>",
+            reply_markup=kb,
+            raise_on_failure=True,
+            message_thread_id=target_thread_id,
+        )
+        sent_messages.extend(_sent_messages(result))
+
+    return sent_messages
 
 
 def _human_size(n: int) -> str:
@@ -279,7 +386,11 @@ def create_max_client(
     _last_notif_time: datetime | None = None
     _snapshot_resolve_task: asyncio.Task | None = None
 
-    async def _deliver_payload(target_chat_id: int, raw_payload: dict, binding: dict) -> None:
+    def _remember_sent_messages(sent_messages: list, max_chat_id, max_message_id) -> None:
+        for sent in sent_messages:
+            router.remember_telegram_message(max_chat_id, getattr(sent, "message_id", None), max_message_id)
+
+    async def _deliver_payload(target_chat_id: int, target_thread_id: int, raw_payload: dict, binding: dict) -> None:
         msg = client._parse_message(raw_payload)
         if msg is None or msg.is_self:
             return
@@ -295,25 +406,30 @@ def create_max_client(
 
         link = msg.link
         link_type = link.get("type") if isinstance(link, dict) else None
+        sent_messages = []
 
         if link_type in ("FORWARD", "REPLY"):
-            await _handle_linked_message(
+            sent_messages.extend(await _handle_linked_message(
                 link,
                 link_type,
                 header_text,
                 client,
                 sender,
                 target_chat_id,
+                target_thread_id,
                 resolver,
                 kb=kb,
-            )
+            ))
             if msg.text:
-                await sender.send_text(
+                result = await sender.send_text(
                     target_chat_id,
                     f"{header_text}\n{escape(msg.text)}",
                     reply_markup=kb,
                     raise_on_failure=True,
+                    message_thread_id=target_thread_id,
                 )
+                sent_messages.extend(_sent_messages(result))
+            _remember_sent_messages(sent_messages, msg.chat_id, msg.message_id)
             log.info("Forwarded link type=%s → TG chat=%s", link_type, target_chat_id)
             return
 
@@ -330,25 +446,33 @@ def create_max_client(
                     text_sent = True
                 else:
                     cap = header_text
-                await _send_attach(attach, client, sender, target_chat_id, cap, kb=kb)
+                sent_messages.extend(
+                    await _send_attach(attach, client, sender, target_chat_id, target_thread_id, cap, kb=kb)
+                )
                 log.info("Forwarded attach _type=%s → TG chat=%s", attach.get("_type"), target_chat_id)
 
             if msg.text and not text_sent:
-                await sender.send_text(
+                result = await sender.send_text(
                     target_chat_id,
                     f"{header_text}\n{escape(msg.text)}",
                     reply_markup=kb,
                     raise_on_failure=True,
+                    message_thread_id=target_thread_id,
                 )
+                sent_messages.extend(_sent_messages(result))
         else:
             body = escape(msg.text) if msg.text else "<i>[нетекстовое сообщение]</i>"
-            await sender.send_text(
+            result = await sender.send_text(
                 target_chat_id,
                 f"{header_text}\n{body}",
                 reply_markup=kb,
                 raise_on_failure=True,
+                message_thread_id=target_thread_id,
             )
+            sent_messages.extend(_sent_messages(result))
             log.info("Forwarded text → TG chat=%s", target_chat_id)
+
+        _remember_sent_messages(sent_messages, msg.chat_id, msg.message_id)
 
     router.set_delivery_callback(_deliver_payload)
 
@@ -380,6 +504,7 @@ def create_max_client(
 
         for chat_id, chat_title in resolver.chats.items():
             router.store.ensure_chat(chat_id, chat_title, resolver.chat_types.get(chat_id))
+            await router.flush_pending_chat(chat_id)
 
     def _can_notify() -> bool:
         if _last_notif_time is None:
@@ -410,7 +535,7 @@ def create_max_client(
         _first_connect = False
 
         for binding in router.list_chats():
-            if binding.get("state") == "pending_bot":
+            if binding.get("state") != "muted":
                 await router.flush_pending_chat(binding["max_chat_id"])
 
         if participant_ids:

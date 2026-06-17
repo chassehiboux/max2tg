@@ -1,5 +1,6 @@
 """Focused tests for app/tg_handler.py."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -7,7 +8,7 @@ import pytest
 from app.chat_bindings import STATE_BOUND, STATE_MUTED, STATE_PENDING_BOT, ChatBindingsStore
 from app.chat_router import ChatRouter
 from app.tg_handler import (
-    PENDING_BIND_REQUESTS_KEY,
+    PENDING_FORUM_REQUEST_ID_KEY,
     PENDING_REPLY_KEY,
     PENDING_REPLY_LABEL_KEY,
     PENDING_REPLY_MODE_KEY,
@@ -18,29 +19,32 @@ from app.tg_handler import (
     PENDING_REPLY_SOURCE_KIND_KEY,
     PENDING_REPLY_SOURCE_MAX_MESSAGE_ID_KEY,
     PENDING_REPLY_SOURCE_MESSAGE_ID_KEY,
-    _on_admin_bind_button,
     _on_chat_shared,
+    _on_forum_button,
     _on_reply_button,
-    _on_reply_mode_button,
     _on_text_reply,
     _on_toggle_tracking_button,
+    _on_topic_button,
+    _on_topic_text,
 )
 
 
 ADMIN_ID = 123456789
 
 
-def _make_router(tmp_path, *, can_access_chat=False):
+def _make_router(tmp_path, *, forum_ok=True, topic_id=77):
     sender = MagicMock()
     sender.send_admin = AsyncMock()
-    sender.can_access_chat = AsyncMock(return_value=can_access_chat)
+    sender.verify_forum = AsyncMock(return_value=(forum_ok, None if forum_ok else "no rights"))
+    sender.create_forum_topic = AsyncMock(return_value=SimpleNamespace(message_thread_id=topic_id))
+    sender.edit_forum_topic = AsyncMock(return_value=True)
     store = ChatBindingsStore(tmp_path / "chat-bindings.json")
     router = ChatRouter(sender, store, admin_id=ADMIN_ID, reply_enabled=True)
     return router, sender
 
 
-def _make_context(tmp_path, *, user_data=None, can_access_chat=False, max_client=None):
-    router, sender = _make_router(tmp_path, can_access_chat=can_access_chat)
+def _make_context(tmp_path, *, user_data=None, forum_ok=True, max_client=None):
+    router, sender = _make_router(tmp_path, forum_ok=forum_ok)
     ctx = MagicMock()
     ctx.user_data = user_data if user_data is not None else {}
     ctx.bot_data = {
@@ -111,11 +115,14 @@ def _make_message_update(
     chat_type="private",
     chat_id=-100,
     message_id=777,
+    message_thread_id=None,
+    reply_to_message_id=None,
 ):
     update = MagicMock()
     update.message = MagicMock()
     update.message.text = text
     update.message.message_id = message_id
+    update.message.message_thread_id = message_thread_id
     update.message.chat = MagicMock()
     update.message.chat.type = chat_type
     update.message.chat_id = chat_id
@@ -123,6 +130,10 @@ def _make_message_update(
     update.message.from_user.id = user_id
     update.message.from_user.full_name = "Alice"
     update.message.reply_text = AsyncMock()
+    if reply_to_message_id is None:
+        update.message.reply_to_message = None
+    else:
+        update.message.reply_to_message = MagicMock(message_id=reply_to_message_id)
     update.effective_chat = MagicMock()
     update.effective_chat.id = chat_id
     update.effective_chat.type = chat_type
@@ -131,12 +142,12 @@ def _make_message_update(
     return update
 
 
-def _make_chat_shared_update(request_id: int, *, tg_chat_id=-100500, title="Target Group", user_id=ADMIN_ID):
+def _make_chat_shared_update(request_id: int, *, tg_forum_chat_id=-100500, title="Work Forum", user_id=ADMIN_ID):
     update = MagicMock()
     update.message = MagicMock()
     update.message.chat_shared = MagicMock(
         request_id=request_id,
-        chat_id=tg_chat_id,
+        chat_id=tg_forum_chat_id,
         title=title,
         username=None,
     )
@@ -152,41 +163,15 @@ def _make_chat_shared_update(request_id: int, *, tg_chat_id=-100500, title="Targ
 
 class TestReplyFlow:
     @pytest.mark.asyncio
-    async def test_reply_button_shows_mode_keyboard(self, tmp_path):
-        query = _make_callback_query("reply:42:999")
+    async def test_reply_button_stores_reply_state_and_prompts(self, tmp_path):
+        query = _make_callback_query("reply:42:999", message_text="First line\nSecond line", message_id=321)
         update = _make_update_with_query(query)
         ctx, _, _ = _make_context(tmp_path)
 
         await _on_reply_button(update, ctx)
-
-        query.message.edit_reply_markup.assert_awaited_once()
-        markup = query.message.edit_reply_markup.call_args.kwargs["reply_markup"]
-        buttons = markup.inline_keyboard[0]
-        assert buttons[0].text == "📨 Сообщением"
-        assert buttons[0].callback_data == "reply_mode:message:42:999"
-        assert buttons[1].callback_data == "reply_mode:reply:42:999"
-
-    @pytest.mark.asyncio
-    async def test_reply_button_rejects_non_admin(self, tmp_path):
-        query = _make_callback_query("reply:42:999")
-        update = _make_update_with_query(query, user_id=999)
-        ctx, _, _ = _make_context(tmp_path)
-
-        await _on_reply_button(update, ctx)
-
-        query.message.edit_reply_markup.assert_not_called()
-        query.answer.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_reply_mode_stores_state_and_prompts(self, tmp_path):
-        query = _make_callback_query("reply_mode:message:42:999", message_text="First line\nSecond line", message_id=321)
-        update = _make_update_with_query(query)
-        ctx, _, _ = _make_context(tmp_path)
-
-        await _on_reply_mode_button(update, ctx)
 
         assert ctx.user_data[PENDING_REPLY_KEY] == 42
-        assert ctx.user_data[PENDING_REPLY_MODE_KEY] == "message"
+        assert ctx.user_data[PENDING_REPLY_MODE_KEY] == "reply"
         assert ctx.user_data[PENDING_REPLY_LABEL_KEY] == "First line"
         assert ctx.user_data[PENDING_REPLY_SOURCE_CHAT_ID_KEY] == -100
         assert ctx.user_data[PENDING_REPLY_SOURCE_MESSAGE_ID_KEY] == 321
@@ -198,33 +183,18 @@ class TestReplyFlow:
         query.message.reply_text.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_text_reply_sends_plain_message_to_max(self, tmp_path):
-        max_client = MagicMock()
-        max_client.send_message = AsyncMock(return_value={"ok": True})
-        ctx, _, _ = _make_context(
-            tmp_path,
-            user_data={
-                PENDING_REPLY_KEY: 42,
-                PENDING_REPLY_LABEL_KEY: "Chat",
-                PENDING_REPLY_MODE_KEY: "message",
-                PENDING_REPLY_SOURCE_CHAT_ID_KEY: -100,
-                PENDING_REPLY_SOURCE_MESSAGE_ID_KEY: 111,
-                PENDING_REPLY_SOURCE_MAX_MESSAGE_ID_KEY: "999",
-                PENDING_REPLY_SOURCE_HTML_KEY: "Line1",
-                PENDING_REPLY_SOURCE_KIND_KEY: "text",
-                PENDING_REPLY_PROMPT_CHAT_ID_KEY: -100,
-                PENDING_REPLY_PROMPT_MESSAGE_ID_KEY: 555,
-            },
-            max_client=max_client,
-        )
-        update = _make_message_update("Hello", chat_type="group")
+    async def test_reply_button_rejects_non_admin(self, tmp_path):
+        query = _make_callback_query("reply:42:999")
+        update = _make_update_with_query(query, user_id=999)
+        ctx, _, _ = _make_context(tmp_path)
 
-        await _on_text_reply(update, ctx)
+        await _on_reply_button(update, ctx)
 
-        max_client.send_message.assert_called_once_with(42, "Hello", [], link=None)
+        query.message.reply_text.assert_not_called()
+        query.answer.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_text_reply_sends_reply_link_to_max(self, tmp_path):
+    async def test_text_reply_sends_reply_link_to_max_without_deleting_owner_message(self, tmp_path):
         max_client = MagicMock()
         max_client.send_message = AsyncMock(return_value={"ok": True})
         ctx, _, _ = _make_context(
@@ -253,84 +223,75 @@ class TestReplyFlow:
             [],
             link={"type": "REPLY", "messageId": 12345},
         )
+        ctx.bot.delete_message.assert_awaited_once_with(chat_id=-100, message_id=555)
 
 
-class TestAdminBindings:
+class TestAdminForum:
     @pytest.mark.asyncio
-    async def test_bind_button_stores_pending_request_and_sends_group_picker(self, tmp_path):
-        ctx, router, _ = _make_context(tmp_path)
-        router.store.ensure_chat(42, "Chat A", "GROUP")
-        query = _make_callback_query("admin:bind:42")
+    async def test_forum_button_stores_pending_request_and_sends_forum_picker(self, tmp_path):
+        ctx, _, _ = _make_context(tmp_path)
+        query = _make_callback_query("admin:forum")
         update = _make_update_with_query(query, chat_type="private", chat_id=ADMIN_ID)
 
-        await _on_admin_bind_button(update, ctx)
+        await _on_forum_button(update, ctx)
 
-        assert len(ctx.user_data[PENDING_BIND_REQUESTS_KEY]) == 1
+        assert PENDING_FORUM_REQUEST_ID_KEY in ctx.user_data
         ctx.bot.send_message.assert_awaited_once()
         kwargs = ctx.bot.send_message.call_args.kwargs
         assert kwargs["chat_id"] == ADMIN_ID
 
     @pytest.mark.asyncio
-    async def test_chat_shared_binds_group_and_marks_pending_bot_when_no_access(self, tmp_path):
-        ctx, router, sender = _make_context(tmp_path, can_access_chat=False)
+    async def test_chat_shared_configures_available_forum(self, tmp_path):
+        ctx, router, sender = _make_context(tmp_path, forum_ok=True)
         router.store.ensure_chat(42, "Chat A", "GROUP")
-        ctx.user_data[PENDING_BIND_REQUESTS_KEY] = {"77": "42"}
+        ctx.user_data[PENDING_FORUM_REQUEST_ID_KEY] = "77"
         update = _make_chat_shared_update(77)
 
         await _on_chat_shared(update, ctx)
 
+        forum = router.store.get_forum()
         binding = router.store.get_chat(42)
-        assert binding is not None
-        assert binding["state"] == STATE_PENDING_BOT
-        assert binding["tg_chat_id"] == -100500
-        sender.send_admin.assert_called_once()
+        assert forum["is_available"] is True
+        assert forum["tg_forum_chat_id"] == -100500
+        assert binding["state"] == STATE_BOUND
+        assert binding["tg_topic_id"] == 77
+        sender.verify_forum.assert_awaited()
         update.message.reply_text.assert_awaited()
 
     @pytest.mark.asyncio
-    async def test_chat_shared_binds_group_and_marks_bound_when_access_exists(self, tmp_path):
-        ctx, router, sender = _make_context(tmp_path, can_access_chat=True)
-        router.store.ensure_chat(42, "Chat A", "GROUP")
-        ctx.user_data[PENDING_BIND_REQUESTS_KEY] = {"77": "42"}
+    async def test_chat_shared_saves_unavailable_forum_with_error(self, tmp_path):
+        ctx, router, _ = _make_context(tmp_path, forum_ok=False)
+        ctx.user_data[PENDING_FORUM_REQUEST_ID_KEY] = "77"
         update = _make_chat_shared_update(77)
 
         await _on_chat_shared(update, ctx)
 
-        binding = router.store.get_chat(42)
-        assert binding is not None
-        assert binding["state"] == STATE_BOUND
-        assert binding["tg_chat_id"] == -100500
-        sender.send_admin.assert_not_called()
+        forum = router.store.get_forum()
+        assert forum["is_available"] is False
+        assert forum["last_error"] == "no rights"
+        update.message.reply_text.assert_awaited()
 
     @pytest.mark.asyncio
-    async def test_chat_shared_allows_reusing_same_group_for_another_chat(self, tmp_path):
-        ctx, router, sender = _make_context(tmp_path, can_access_chat=True)
+    async def test_topic_button_creates_topic(self, tmp_path):
+        ctx, router, _ = _make_context(tmp_path, forum_ok=True)
         router.store.ensure_chat(42, "Chat A", "GROUP")
-        router.store.ensure_chat(43, "Chat B", "GROUP")
-        router.store.set_binding(42, -100500, "Shared Group")
-        router.store.mark_bound(42)
-        ctx.user_data[PENDING_BIND_REQUESTS_KEY] = {"77": "43"}
-        update = _make_chat_shared_update(77, title="Shared Group")
+        await router.configure_forum(-100500, "Work Forum")
+        query = _make_callback_query("admin:topic:42")
+        update = _make_update_with_query(query, chat_type="private", chat_id=ADMIN_ID)
 
-        await _on_chat_shared(update, ctx)
+        await _on_topic_button(update, ctx)
 
-        first = router.store.get_chat(42)
-        second = router.store.get_chat(43)
-        assert first is not None
-        assert second is not None
-        assert first["tg_chat_id"] == -100500
-        assert second["tg_chat_id"] == -100500
-        assert second["state"] == STATE_BOUND
-        first_reply = update.message.reply_text.await_args_list[0].args[0]
-        assert "Привязка сохранена" in first_reply
-        assert "уже привязана" not in first_reply
-        sender.send_admin.assert_not_called()
+        binding = router.store.get_chat(42)
+        assert binding["state"] == STATE_BOUND
+        assert binding["tg_topic_id"] == 77
+        query.answer.assert_awaited()
 
     @pytest.mark.asyncio
     async def test_toggle_tracking_marks_chat_muted(self, tmp_path):
         ctx, router, _ = _make_context(tmp_path)
         router.store.ensure_chat(42, "Chat A", "GROUP")
-        router.store.set_binding(42, -100500, "Group A")
-        router.store.mark_bound(42)
+        router.store.set_forum(-100500, "Work Forum")
+        router.store.set_topic(42, -100500, 77, "Chat A")
         query = _make_callback_query("admin:toggle:42", chat_id=ADMIN_ID)
         update = _make_update_with_query(query, chat_id=ADMIN_ID, chat_type="private")
 
@@ -340,3 +301,52 @@ class TestAdminBindings:
         assert binding is not None
         assert binding["state"] == STATE_MUTED
         query.message.edit_text.assert_awaited_once()
+
+
+class TestTopicText:
+    @pytest.mark.asyncio
+    async def test_owner_text_in_topic_sends_plain_message_to_max(self, tmp_path):
+        max_client = MagicMock()
+        max_client.send_message = AsyncMock(return_value={"ok": True})
+        ctx, router, _ = _make_context(tmp_path, max_client=max_client)
+        router.store.ensure_chat(42, "Chat A", "GROUP")
+        router.store.set_forum(-100500, "Work Forum")
+        router.store.set_topic(42, -100500, 77, "Chat A")
+        update = _make_message_update(
+            "Hello",
+            chat_type="supergroup",
+            chat_id=-100500,
+            message_thread_id=77,
+        )
+
+        handled = await _on_topic_text(update, ctx)
+
+        assert handled is True
+        max_client.send_message.assert_called_once_with(42, "Hello", [], link=None)
+
+    @pytest.mark.asyncio
+    async def test_owner_reply_in_topic_sends_max_reply_link(self, tmp_path):
+        max_client = MagicMock()
+        max_client.send_message = AsyncMock(return_value={"ok": True})
+        ctx, router, _ = _make_context(tmp_path, max_client=max_client)
+        router.store.ensure_chat(42, "Chat A", "GROUP")
+        router.store.set_forum(-100500, "Work Forum")
+        router.store.set_topic(42, -100500, 77, "Chat A")
+        router.remember_telegram_message(42, 999, "12345")
+        update = _make_message_update(
+            "Reply",
+            chat_type="supergroup",
+            chat_id=-100500,
+            message_thread_id=77,
+            reply_to_message_id=999,
+        )
+
+        handled = await _on_topic_text(update, ctx)
+
+        assert handled is True
+        max_client.send_message.assert_called_once_with(
+            42,
+            "Reply",
+            [],
+            link={"type": "REPLY", "messageId": 12345},
+        )

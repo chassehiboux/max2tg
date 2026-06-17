@@ -16,7 +16,7 @@ from telegram.ext import (
 from app.chat_bindings import STATE_BOUND, STATE_MUTED, STATE_PENDING_BOT, STATE_UNCONFIGURED
 from app.chat_router import ChatRouter
 from app.max_client import MaxClient
-from app.tg_sender import admin_home_keyboard, reply_keyboard, reply_mode_keyboard, request_group_keyboard
+from app.tg_sender import admin_home_keyboard, reply_keyboard, reply_mode_keyboard, request_forum_keyboard
 
 log = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ PENDING_REPLY_SOURCE_MESSAGE_ID_KEY = "pending_reply_source_message_id"
 PENDING_REPLY_SOURCE_MAX_MESSAGE_ID_KEY = "pending_reply_source_max_message_id"
 PENDING_REPLY_SOURCE_HTML_KEY = "pending_reply_source_html"
 PENDING_REPLY_SOURCE_KIND_KEY = "pending_reply_source_kind"
-PENDING_BIND_REQUESTS_KEY = "pending_bind_requests"
+PENDING_FORUM_REQUEST_ID_KEY = "pending_forum_request_id"
 
 _ADMIN_ID_KEY = "admin_id"
 _MAX_CLIENT_KEY = "max_client"
@@ -164,19 +164,21 @@ def _binding_icon(binding: dict) -> str:
 def _binding_summary_line(binding: dict) -> str:
     title = binding.get("max_chat_title") or str(binding.get("max_chat_id"))
     state = binding.get("state")
-    tg_title = binding.get("tg_chat_title") or binding.get("tg_chat_id")
+    topic_title = binding.get("tg_topic_name") or binding.get("tg_topic_id")
     queue_len = len(binding.get("pending_messages") or [])
 
     if state == STATE_BOUND:
-        return f"✅ <b>{html.escape(str(title))}</b> → {html.escape(str(tg_title))}"
+        return f"✅ <b>{html.escape(str(title))}</b> → {html.escape(str(topic_title))}"
     if state == STATE_PENDING_BOT:
+        error_text = binding.get("tg_topic_error") or binding.get("last_access_error")
+        suffix = f" | {html.escape(str(error_text))}" if error_text else ""
         return (
-            f"⏳ <b>{html.escape(str(title))}</b> → {html.escape(str(tg_title))}"
-            f" | очередь: {queue_len}"
+            f"⏳ <b>{html.escape(str(title))}</b> | топик недоступен"
+            f" | очередь: {queue_len}{suffix}"
         )
     if state == STATE_MUTED:
         return f"🚫 <b>{html.escape(str(title))}</b> | не отслеживается"
-    return f"🆕 <b>{html.escape(str(title))}</b> | группа не выбрана"
+    return f"🆕 <b>{html.escape(str(title))}</b> | топик ещё не создан"
 
 
 def _binding_button_label(binding: dict, max_length: int = 28) -> str:
@@ -187,13 +189,15 @@ def _binding_button_label(binding: dict, max_length: int = 28) -> str:
 
 
 def _settings_keyboard(bindings: list[dict]) -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
+    rows: list[list[InlineKeyboardButton]] = [[
+        InlineKeyboardButton("Выбрать форум", callback_data="admin:forum")
+    ]]
     for binding in bindings:
         max_chat_id = binding.get("max_chat_id")
         rows.append([
             InlineKeyboardButton(
                 _binding_button_label(binding),
-                callback_data=f"admin:bind:{max_chat_id}",
+                callback_data=f"admin:topic:{max_chat_id}",
             ),
             InlineKeyboardButton(
                 "↩" if binding.get("state") == STATE_MUTED else "✖",
@@ -203,16 +207,33 @@ def _settings_keyboard(bindings: list[dict]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
-def _settings_text(bindings: list[dict]) -> str:
+def _forum_summary_line(forum: dict) -> str:
+    forum_chat_id = forum.get("tg_forum_chat_id")
+    if forum_chat_id is None:
+        return "Рабочий Telegram-форум: <b>не выбран</b>"
+
+    title = forum.get("tg_forum_title") or forum_chat_id
+    if forum.get("is_available"):
+        return f"Рабочий Telegram-форум: ✅ <b>{html.escape(str(title))}</b>"
+
+    error_text = forum.get("last_error")
+    suffix = f"\n⚠️ {html.escape(str(error_text))}" if error_text else ""
+    return f"Рабочий Telegram-форум: ⏳ <b>{html.escape(str(title))}</b>{suffix}"
+
+
+def _settings_text(bindings: list[dict], forum: dict) -> str:
     if not bindings:
         return (
             "📭 <b>Чаты MAX пока не обнаружены.</b>\n"
-            "После подключения MAX здесь появится список чатов для привязки."
+            f"{_forum_summary_line(forum)}\n\n"
+            "После подключения MAX здесь появится список чатов и их топиков."
         )
 
     lines = [
-        "⚙️ <b>Настройка чатов MAX</b>",
-        "Нажмите на чат слева, чтобы выбрать или сменить Telegram-группу.",
+        "⚙️ <b>Настройка MAX → Telegram-топики</b>",
+        _forum_summary_line(forum),
+        "",
+        "Нажмите на чат слева, чтобы создать или обновить его топик.",
         "Кнопка справа отключает чат из пересылки или включает его обратно.",
         "",
     ]
@@ -227,8 +248,9 @@ async def _render_settings_message(
 ) -> None:
     router = _router(context)
     bindings = router.list_chats()
-    text = _settings_text(bindings)
-    reply_markup = _settings_keyboard(bindings) if bindings else admin_home_keyboard()
+    forum = router.get_forum()
+    text = _settings_text(bindings, forum)
+    reply_markup = _settings_keyboard(bindings)
 
     if edit_existing and update and update.callback_query and update.callback_query.message:
         await update.callback_query.message.edit_text(
@@ -292,7 +314,7 @@ async def _on_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     await update.message.reply_text(
         "🤖 <b>max2tg готов к работе.</b>\n"
-        "В личке вы получаете технические уведомления и управляете привязкой чатов MAX к Telegram-группам.",
+        "В личке вы выбираете рабочий Telegram-форум и управляете топиками для чатов MAX.",
         parse_mode=ParseMode.HTML,
         reply_markup=admin_home_keyboard(),
     )
@@ -314,38 +336,50 @@ async def _on_settings_button(update: Update, context: ContextTypes.DEFAULT_TYPE
     await _render_settings_message(update, context, edit_existing=True)
 
 
-async def _on_admin_bind_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def _on_forum_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not _is_admin(update, context):
         await query.answer("Доступно только владельцу бота.", show_alert=True)
         return
 
-    max_chat_id = _parse_admin_chat_id(query.data or "", "admin:bind")
+    request_id = _new_request_id()
+    context.user_data[PENDING_FORUM_REQUEST_ID_KEY] = str(request_id)
+
+    await query.answer("Выберите форум в следующем сообщении.")
+    await context.bot.send_message(
+        chat_id=_admin_id(context),
+        text=(
+            "📎 <b>Рабочий Telegram-форум</b>\n"
+            "Выберите супергруппу с включёнными темами. Бот должен быть администратором "
+            "и иметь право управлять темами."
+        ),
+        parse_mode=ParseMode.HTML,
+        reply_markup=request_forum_keyboard(request_id),
+    )
+
+
+async def _on_topic_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update, context):
+        await query.answer("Доступно только владельцу бота.", show_alert=True)
+        return
+
+    max_chat_id = _parse_admin_chat_id(query.data or "", "admin:topic")
     if max_chat_id is None:
         await query.answer()
         return
 
     router = _router(context)
-    binding = router.get_chat(max_chat_id)
+    binding = await router.create_or_refresh_topic(max_chat_id)
     if binding is None:
         await query.answer("Чат MAX не найден.", show_alert=True)
         return
 
-    request_id = _new_request_id()
-    context.user_data[PENDING_BIND_REQUESTS_KEY] = {str(request_id): str(max_chat_id)}
-
-    await query.answer("Выберите группу в следующем сообщении.")
-    await context.bot.send_message(
-        chat_id=_admin_id(context),
-        text=(
-            "📎 <b>Привязка чата MAX</b>\n"
-            f"{html.escape(str(binding.get('max_chat_title') or max_chat_id))}\n\n"
-            "Выберите Telegram-группу. Если бота там ещё нет, привязка всё равно сохранится,"
-            " а сообщения будут копиться в очереди до момента, когда вы его добавите."
-        ),
-        parse_mode=ParseMode.HTML,
-        reply_markup=request_group_keyboard(request_id),
-    )
+    if binding.get("state") == STATE_BOUND:
+        await query.answer("Топик готов.")
+    else:
+        await query.answer("Топик пока недоступен.", show_alert=True)
+    await _render_settings_message(update, context, edit_existing=True)
 
 
 async def _on_toggle_tracking_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -366,7 +400,7 @@ async def _on_toggle_tracking_button(update: Update, context: ContextTypes.DEFAU
         await query.answer("Чат MAX не найден.", show_alert=True)
         return
 
-    if binding.get("state") == STATE_PENDING_BOT:
+    if binding.get("state") != STATE_MUTED:
         await router.flush_pending_chat(max_chat_id)
 
     await query.answer("Состояние обновлено.")
@@ -382,46 +416,34 @@ async def _on_chat_shared(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if chat_shared is None:
         return
 
-    pending_requests = context.user_data.get(PENDING_BIND_REQUESTS_KEY) or {}
-    max_chat_id_raw = pending_requests.pop(str(chat_shared.request_id), None)
-    if not pending_requests:
-        context.user_data.pop(PENDING_BIND_REQUESTS_KEY, None)
-    else:
-        context.user_data[PENDING_BIND_REQUESTS_KEY] = pending_requests
-
-    if max_chat_id_raw is None:
+    pending_request_id = context.user_data.get(PENDING_FORUM_REQUEST_ID_KEY)
+    if pending_request_id != str(chat_shared.request_id):
         await message.reply_text(
-            "⚠️ Не нашёл активный запрос на привязку. Запустите выбор группы ещё раз.",
+            "⚠️ Не нашёл активный запрос выбора форума. Запустите выбор ещё раз.",
             reply_markup=ReplyKeyboardRemove(),
         )
         return
-
-    try:
-        max_chat_id = int(max_chat_id_raw)
-    except ValueError:
-        max_chat_id = max_chat_id_raw
+    context.user_data.pop(PENDING_FORUM_REQUEST_ID_KEY, None)
 
     router = _router(context)
-    binding = await router.bind_chat(
-        max_chat_id,
+    forum = await router.configure_forum(
         chat_shared.chat_id,
-        tg_chat_title=chat_shared.title,
-        tg_chat_username=chat_shared.username,
+        tg_forum_title=chat_shared.title,
+        tg_forum_username=chat_shared.username,
     )
 
-    if binding.get("state") == STATE_BOUND:
+    if forum.get("is_available"):
         text = (
-            "✅ <b>Привязка сохранена.</b>\n"
-            f"MAX: {html.escape(str(binding.get('max_chat_title') or max_chat_id))}\n"
-            f"Telegram: {html.escape(str(binding.get('tg_chat_title') or chat_shared.chat_id))}\n"
-            "Пересылка уже активна."
+            "✅ <b>Рабочий Telegram-форум сохранён.</b>\n"
+            f"{html.escape(str(forum.get('tg_forum_title') or chat_shared.chat_id))}\n\n"
+            "Теперь бот будет создавать отдельные топики для чатов MAX."
         )
     else:
+        error_text = forum.get("last_error") or "Проверьте, что это супергруппа с темами и бот там администратор."
         text = (
-            "⏳ <b>Привязка сохранена.</b>\n"
-            f"MAX: {html.escape(str(binding.get('max_chat_title') or max_chat_id))}\n"
-            f"Telegram: {html.escape(str(binding.get('tg_chat_title') or chat_shared.chat_id))}\n"
-            "Бот пока не может писать в эту группу. Очередь будет копиться и дозальётся после добавления бота."
+            "⏳ <b>Форум сохранён, но пока недоступен.</b>\n"
+            f"{html.escape(str(forum.get('tg_forum_title') or chat_shared.chat_id))}\n\n"
+            f"{html.escape(str(error_text))}"
         )
 
     await message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove())
@@ -435,6 +457,10 @@ async def _on_reply_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await query.answer("Доступно только владельцу бота.", show_alert=True)
         return
 
+    if context.user_data.get(PENDING_REPLY_KEY) is not None:
+        await query.answer("Сначала завершите или отмените предыдущий ответ.", show_alert=True)
+        return
+
     await query.answer()
 
     target = _parse_reply_target(query.data or "", "reply")
@@ -442,7 +468,25 @@ async def _on_reply_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     max_chat_id, max_message_id = target
-    await query.message.edit_reply_markup(reply_markup=reply_mode_keyboard(max_chat_id, max_message_id))
+    source_html, source_kind = _message_html(query.message)
+    context.user_data[PENDING_REPLY_KEY] = max_chat_id
+    context.user_data[PENDING_REPLY_MODE_KEY] = "reply"
+    source_text = query.message.text or query.message.caption or ""
+    label = source_text.split("\n")[0] if source_text else str(max_chat_id)
+    context.user_data[PENDING_REPLY_LABEL_KEY] = label
+    context.user_data[PENDING_REPLY_SOURCE_CHAT_ID_KEY] = query.message.chat_id
+    context.user_data[PENDING_REPLY_SOURCE_MESSAGE_ID_KEY] = query.message.message_id
+    context.user_data[PENDING_REPLY_SOURCE_MAX_MESSAGE_ID_KEY] = max_message_id
+    context.user_data[PENDING_REPLY_SOURCE_HTML_KEY] = source_html
+    context.user_data[PENDING_REPLY_SOURCE_KIND_KEY] = source_kind
+
+    prompt_message = await query.message.reply_text(
+        f"✏️ Напишите reply для <b>{html.escape(label)}</b>:\n"
+        "<i>(или /cancel для отмены)</i>",
+        parse_mode=ParseMode.HTML,
+    )
+    context.user_data[PENDING_REPLY_PROMPT_CHAT_ID_KEY] = prompt_message.chat_id
+    context.user_data[PENDING_REPLY_PROMPT_MESSAGE_ID_KEY] = prompt_message.message_id
 
 
 async def _on_reply_mode_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -508,8 +552,8 @@ async def _on_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
         return
 
-    if context.user_data.pop(PENDING_BIND_REQUESTS_KEY, None) is not None and update.message is not None:
-        await update.message.reply_text("Выбор группы отменён.", reply_markup=ReplyKeyboardRemove())
+    if context.user_data.pop(PENDING_FORUM_REQUEST_ID_KEY, None) is not None and update.message is not None:
+        await update.message.reply_text("Выбор форума отменён.", reply_markup=ReplyKeyboardRemove())
         return
 
     if update.message is not None:
@@ -543,24 +587,55 @@ async def _on_text_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         resp = await max_client.send_message(max_chat_id, text, [], link=link)
         if resp:
-            try:
-                edited = await _append_reply_to_source_message(context.bot, state, update.message.from_user.full_name, text)
-            except Exception:
-                log.exception("Failed to edit source Telegram message after send to Max chat %s", max_chat_id)
-                edited = False
-
-            if not edited:
-                safe_target = html.escape(str(state["label"] or max_chat_id))
-                await update.message.reply_text(f"✅ Отправлено → <b>{safe_target}</b>", parse_mode=ParseMode.HTML)
-
-            await _delete_message_safe(
-                context.bot, update.effective_chat.id, update.message.message_id, "user reply"
-            )
+            return
         else:
             await update.message.reply_text("⚠️ Не удалось отправить сообщение в Max.")
     except Exception:
         log.exception("Failed to send reply to Max chat %s", max_chat_id)
         await update.message.reply_text("⚠️ Ошибка при отправке в Max.")
+
+
+async def _on_topic_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    if not _is_admin(update, context):
+        return False
+
+    message = update.message
+    chat = update.effective_chat
+    if message is None or chat is None or chat.type == "private":
+        return False
+
+    message_thread_id = getattr(message, "message_thread_id", None)
+    if message_thread_id is None:
+        return False
+
+    router = _router(context)
+    binding = router.find_by_topic(chat.id, message_thread_id)
+    if binding is None or binding.get("state") == STATE_MUTED:
+        return False
+
+    max_client = _max_client(context)
+    if not max_client:
+        await message.reply_text("⚠️ Max клиент не подключён.")
+        return True
+
+    link = None
+    reply_to = getattr(message, "reply_to_message", None)
+    if reply_to is not None:
+        max_message_id = router.find_linked_max_message_id(chat.id, message_thread_id, reply_to.message_id)
+        reply_message_id = _reply_link_message_id(max_message_id)
+        if reply_message_id is not None:
+            link = {"type": "REPLY", "messageId": reply_message_id}
+
+    try:
+        resp = await max_client.send_message(binding["max_chat_id"], message.text, [], link=link)
+    except Exception:
+        log.exception("Failed to send topic text to Max chat %s", binding.get("max_chat_id"))
+        await message.reply_text("⚠️ Ошибка при отправке в Max.")
+        return True
+
+    if not resp:
+        await message.reply_text("⚠️ Не удалось отправить сообщение в Max.")
+    return True
 
 
 async def _on_admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -571,6 +646,9 @@ async def _on_admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await _on_text_reply(update, context)
         return
 
+    if await _on_topic_text(update, context):
+        return
+
     if not _is_private_admin_chat(update, context):
         return
 
@@ -579,8 +657,8 @@ async def _on_admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await _render_settings_message(update, context, edit_existing=False)
         return
 
-    if text.lower() in {"отмена", "cancel"} and context.user_data.pop(PENDING_BIND_REQUESTS_KEY, None) is not None:
-        await update.message.reply_text("Выбор группы отменён.", reply_markup=ReplyKeyboardRemove())
+    if text.lower() in {"отмена", "cancel"} and context.user_data.pop(PENDING_FORUM_REQUEST_ID_KEY, None) is not None:
+        await update.message.reply_text("Выбор форума отменён.", reply_markup=ReplyKeyboardRemove())
         return
 
     await update.message.reply_text(
@@ -620,7 +698,8 @@ def build_tg_app(
     app.add_handler(CommandHandler("chats", _on_show_settings, filters=admin_private_filter))
     app.add_handler(CommandHandler("cancel", _on_cancel, filters=admin_user_filter))
     app.add_handler(CallbackQueryHandler(_on_settings_button, pattern=r"^admin:settings$"))
-    app.add_handler(CallbackQueryHandler(_on_admin_bind_button, pattern=r"^admin:bind:"))
+    app.add_handler(CallbackQueryHandler(_on_forum_button, pattern=r"^admin:forum$"))
+    app.add_handler(CallbackQueryHandler(_on_topic_button, pattern=r"^admin:topic:"))
     app.add_handler(CallbackQueryHandler(_on_toggle_tracking_button, pattern=r"^admin:toggle:"))
     app.add_handler(MessageHandler(filters.StatusUpdate.CHAT_SHARED & admin_private_filter, _on_chat_shared))
 

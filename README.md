@@ -23,7 +23,8 @@
 - Пересылка текстовых сообщений, фото, видео, файлов, аудио, стикеров, контактов, геолокаций и ссылок
 - Поддержка пересланных и цитируемых сообщений (forward / reply)
 - Разное оформление для личных и групповых чатов
-- Ответ из Telegram обратно в Max (опционально, через inline-кнопку)
+- Автоматические Telegram-топики для чатов MAX в одной форум-супергруппе
+- Ответ из Telegram обратно в Max: обычным сообщением из топика или reply на конкретное сообщение
 - Уведомления о статусе соединения с Max — при запуске, потере связи и восстановлении (с троттлингом, чтобы не спамить)
 - Поддержка SOCKS5-прокси для подключения к Telegram
 - Работает как userbot — подключается к вашему аккаунту Max через WebSocket
@@ -55,6 +56,7 @@
 2. Скопируйте полученный токен → это ваш `TG_BOT_TOKEN`
 3. Узнайте свой user ID: напишите [@userinfobot](https://t.me/userinfobot) → он ответит вашим ID → это `TG_ADMIN_ID`
 4. **Важно:** напишите вашему боту `/start`, чтобы он мог вам отправлять сообщения
+5. Создайте Telegram-супергруппу, включите в ней темы, добавьте бота администратором и выдайте право управлять темами
 
 ## Настройка
 
@@ -79,7 +81,7 @@ cp .env.example .env
 | `LOG_DIR`       | нет          | Путь к директории логов (по умолчанию `logs`)  |
 | `TG_PROXY`      | нет          | SOCKS5-прокси для Telegram (`socks5://host:port`) |
 
-После запуска бот пишет владельцу в личку, показывает кнопку `Настроить чаты` и позволяет привязать каждый чат MAX к своей Telegram-группе или объединить несколько чатов MAX в одну общую группу. Привязки и очередь недоставленных сообщений сохраняются локально в `data/chat_bindings.json`.
+После запуска бот пишет владельцу в личку и показывает кнопку `Настроить чаты`. В этом меню нужно один раз выбрать рабочий Telegram-форум. Дальше бот автоматически создаёт отдельный топик для каждого чата MAX и сохраняет состояние, топики, reply-связи и очередь недоставленных сообщений в `data/chat_bindings.json`.
 
 ## Запуск
 
@@ -226,14 +228,14 @@ sudo journalctl -u max2tg -f
 ```
 Max (WebSocket) ──→ max2tg ──→ [SOCKS5 proxy] ──→ Telegram Bot ──→ Личка владельца
                        │                                              │
-                       ├──────────────────────────────────────────────→ Telegram-группы по чатам или общие
+                       ├──────────────────────────────────────────────→ Telegram-форум → топики MAX-чатов
                        └────────── (если REPLY_ENABLED) ──────────────┘
 ```
 
 1. Приложение подключается к Max через WebSocket как ваш аккаунт
-2. Технические сообщения приходят владельцу в личку, а каждый чат MAX можно привязать к своей Telegram-группе или направить несколько чатов MAX в одну общую группу
-3. Если бот ещё не добавлен в выбранную группу, сообщения копятся локально и дозаливаются после появления доступа
-4. Если `REPLY_ENABLED=true`, под каждым рабочим сообщением появляется кнопка «Ответить» — ответить обратно в Max может только владелец
+2. Технические сообщения приходят владельцу в личку, а рабочие сообщения уходят в топики выбранного Telegram-форума
+3. Если форум или топик временно недоступен, сообщения копятся локально и дозаливаются после восстановления доступа
+4. Если `REPLY_ENABLED=true`, владелец может писать в топике обычные сообщения в MAX или делать Telegram reply на пересланное сообщение, чтобы отправить reply в MAX
 
 ## Структура проекта
 
@@ -299,7 +301,8 @@ Real-time message forwarding from **Max** messenger (max.ru) to **Telegram** —
 - Forwards text messages, photos, videos, files, audio, stickers, contacts, locations, and links
 - Supports forwarded and quoted messages (forward / reply)
 - Different formatting for DMs and group chats
-- Reply from Telegram back to Max (optional, via inline button)
+- Automatic Telegram topics for Max chats inside one forum supergroup
+- Reply from Telegram back to Max: plain topic messages or replies to specific forwarded messages
 - Connection status notifications — on startup, disconnect, and reconnect (throttled to avoid spam)
 - SOCKS5 proxy support for connecting to Telegram
 - Works as a userbot — connects to your Max account via WebSocket
@@ -331,6 +334,7 @@ Real-time message forwarding from **Max** messenger (max.ru) to **Telegram** —
 2. Copy the token → this is your `TG_BOT_TOKEN`
 3. Get your user ID: message [@userinfobot](https://t.me/userinfobot) → it replies with your ID → this is `TG_ADMIN_ID`
 4. **Important:** send `/start` to your bot so it can message you
+5. Create a Telegram supergroup, enable topics, add the bot as an administrator, and grant it topic management rights
 
 ## Configuration
 
@@ -354,7 +358,7 @@ cp .env.example .env
 | `LOG_DIR` | no | Log directory path (default: `logs`) |
 | `TG_PROXY` | no | SOCKS5 proxy for Telegram (`socks5://host:port`) |
 
-After startup, the bot writes to the owner's private chat, shows a `Configure chats` button, and lets you bind each Max chat to a separate Telegram group. Bindings and the backlog queue are stored locally in `data/chat_bindings.json`.
+After startup, the bot writes to the owner's private chat and shows a `Configure chats` button. Use it once to choose the working Telegram forum. The bot then automatically creates one topic per Max chat and stores forum state, topics, reply links, and the backlog queue in `data/chat_bindings.json`.
 
 ## Running
 
@@ -501,14 +505,14 @@ sudo journalctl -u max2tg -f
 ```
 Max (WebSocket) ──→ max2tg ──→ [SOCKS5 proxy] ──→ Telegram Bot ──→ Owner DM
                        │                                              │
-                       ├──────────────────────────────────────────────→ Separate Telegram groups
+                       ├──────────────────────────────────────────────→ Telegram forum → Max chat topics
                        └────────── (if REPLY_ENABLED) ────────────────┘
 ```
 
 1. The app connects to Max via WebSocket using your account credentials
-2. Technical messages go to the owner's DM, and each Max chat can be bound to its own Telegram group
-3. If the bot is not yet in the selected group, incoming Max messages are queued locally and replayed after access appears
-4. If `REPLY_ENABLED=true`, each forwarded work message includes a reply flow back to the matching Max chat, but only the owner can use it
+2. Technical messages go to the owner's DM, and work messages go to topics in the selected Telegram forum
+3. If the forum or topic is temporarily unavailable, incoming Max messages are queued locally and replayed after access appears
+4. If `REPLY_ENABLED=true`, the owner can send plain topic messages to Max or reply to a forwarded message to create a Max reply
 
 ## Project Structure
 

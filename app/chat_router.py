@@ -20,11 +20,13 @@ from app.tg_sender import admin_home_keyboard, new_chat_keyboard
 
 log = logging.getLogger(__name__)
 
-DeliverCallback = Callable[[int, dict[str, Any], dict[str, Any]], Awaitable[None]]
+DeliverCallback = Callable[[int, int, dict[str, Any], dict[str, Any]], Awaitable[None]]
+
+TOPIC_NAME_MAX_LENGTH = 128
 
 
 class TelegramTargetUnavailableError(RuntimeError):
-    """Raised when a Telegram target chat exists in config but is not reachable by the bot."""
+    """Raised when a Telegram forum/topic exists in config but is not reachable by the bot."""
 
 
 class ChatRouter:
@@ -97,12 +99,21 @@ class ChatRouter:
         return new_count
 
     async def maybe_notify_unconfigured_summary(self) -> None:
+        forum = self.store.get_forum()
+        if forum.get("tg_forum_chat_id") is None:
+            await self.send_admin(
+                "🧭 <b>Нужно выбрать рабочий Telegram-форум.</b>\n"
+                "После выбора бот будет автоматически создавать отдельный топик для каждого чата MAX.",
+                reply_markup=admin_home_keyboard(),
+            )
+            return
+
         pending_count = self.store.count_by_state(STATE_UNCONFIGURED)
         if pending_count <= 0:
             return
         await self.send_admin(
-            "🧭 <b>Найдены чаты MAX без привязки.</b>\n"
-            "Откройте настройку и решите, какие чаты нужно привязать, а какие не отслеживать.",
+            "🧭 <b>Есть чаты MAX без готового топика.</b>\n"
+            "Бот попробует создать топики автоматически.",
             reply_markup=admin_home_keyboard(),
         )
 
@@ -116,21 +127,36 @@ class ChatRouter:
         if created and self._initial_snapshot_seen and not binding.get("new_chat_notified"):
             await self.send_admin(
                 "🆕 <b>Новый чат MAX</b>\n"
-                f"{escape(max_chat_title or str(max_chat_id))}",
+                f"{escape(max_chat_title or str(max_chat_id))}\n"
+                "Для него будет создан отдельный Telegram-топик.",
                 reply_markup=new_chat_keyboard(max_chat_id),
             )
             binding = self.store.mark_new_chat_notified(max_chat_id)
         return binding
 
-    async def bind_chat(
+    async def configure_forum(
         self,
-        max_chat_id: Any,
-        tg_chat_id: int,
-        tg_chat_title: str | None = None,
-        tg_chat_username: str | None = None,
+        tg_forum_chat_id: int,
+        tg_forum_title: str | None = None,
+        tg_forum_username: str | None = None,
     ) -> dict[str, Any]:
-        binding = self.store.set_binding(max_chat_id, tg_chat_id, tg_chat_title, tg_chat_username)
-        binding = await self._probe_chat(binding)
+        forum = self.store.set_forum(tg_forum_chat_id, tg_forum_title, tg_forum_username)
+        ok, error_text = await self._verify_forum(tg_forum_chat_id)
+        if not ok:
+            return self.store.mark_forum_available(False, error_text)
+
+        forum = self.store.mark_forum_available(True)
+        for binding in self.store.list_active_chats():
+            await self.flush_pending_chat(binding["max_chat_id"])
+        return forum
+
+    async def create_or_refresh_topic(self, max_chat_id: Any) -> dict[str, Any] | None:
+        binding = self.store.get_chat(max_chat_id)
+        if binding is None:
+            return None
+        binding = await self._ensure_topic(binding)
+        if binding.get("state") == STATE_BOUND:
+            await self._flush_binding_queue(binding)
         return binding
 
     def toggle_tracking(self, max_chat_id: Any) -> dict[str, Any]:
@@ -147,6 +173,25 @@ class ChatRouter:
     def get_chat(self, max_chat_id: Any) -> dict[str, Any] | None:
         return self.store.get_chat(max_chat_id)
 
+    def get_forum(self) -> dict[str, Any]:
+        return self.store.get_forum()
+
+    def find_by_topic(self, tg_forum_chat_id: int, tg_topic_id: int) -> dict[str, Any] | None:
+        return self.store.find_by_topic(tg_forum_chat_id, tg_topic_id)
+
+    def remember_telegram_message(self, max_chat_id: Any, tg_message_id: int | None, max_message_id: Any) -> None:
+        if tg_message_id is None:
+            return
+        self.store.add_message_link(max_chat_id, tg_message_id, max_message_id)
+
+    def find_linked_max_message_id(
+        self,
+        tg_forum_chat_id: int,
+        tg_topic_id: int,
+        tg_message_id: int,
+    ) -> str | None:
+        return self.store.find_linked_max_message_id(tg_forum_chat_id, tg_topic_id, tg_message_id)
+
     async def route_payload(
         self,
         max_chat_id: Any,
@@ -160,12 +205,8 @@ class ChatRouter:
         if state == STATE_MUTED:
             return
 
-        if state == STATE_UNCONFIGURED:
-            return
-
-        if state == STATE_PENDING_BOT:
-            binding = await self._probe_chat(binding)
-            state = binding.get("state")
+        binding = await self._ensure_topic(binding)
+        state = binding.get("state")
 
         if state != STATE_BOUND:
             await self._queue_pending_message(binding, raw_payload)
@@ -174,10 +215,17 @@ class ChatRouter:
         try:
             await self._deliver(binding, raw_payload)
         except TelegramTargetUnavailableError as exc:
-            binding = self.store.mark_pending_bot(max_chat_id, str(exc))
+            clear_topic = _is_topic_unavailable_text(str(exc))
+            if not clear_topic:
+                self.store.mark_forum_available(False, str(exc))
+            binding = self.store.mark_topic_pending(
+                max_chat_id,
+                str(exc),
+                clear_topic=clear_topic,
+            )
             await self._queue_pending_message(binding, raw_payload)
         except Exception:
-            log.exception("Failed to deliver MAX chat %s to Telegram", max_chat_id)
+            log.exception("Failed to deliver MAX chat %s to Telegram topic", max_chat_id)
             await self.send_admin(
                 "⚠️ <b>Ошибка пересылки в Telegram</b>\n"
                 f"Чат MAX: {escape(binding.get('max_chat_title') or str(max_chat_id))}"
@@ -185,58 +233,105 @@ class ChatRouter:
 
     async def flush_pending_chat(self, max_chat_id: Any) -> dict[str, Any] | None:
         binding = self.store.get_chat(max_chat_id)
-        if binding is None:
-            return None
-        return await self._probe_chat(binding)
+        if binding is None or binding.get("state") == STATE_MUTED:
+            return binding
+        binding = await self._ensure_topic(binding)
+        if binding.get("state") == STATE_BOUND:
+            await self._flush_binding_queue(binding)
+        return binding
 
     async def _probe_loop(self) -> None:
         while True:
             await asyncio.sleep(self.PROBE_INTERVAL_SEC)
-            pending = self.store.list_pending_bindings()
-            for binding in pending:
+            for binding in self.store.list_active_chats():
                 try:
-                    await self._probe_chat(binding)
+                    await self.flush_pending_chat(binding["max_chat_id"])
                 except Exception:
-                    log.exception("Pending chat probe failed for MAX chat %s", binding.get("max_chat_id"))
+                    log.exception("Forum topic probe failed for MAX chat %s", binding.get("max_chat_id"))
 
-    async def _probe_chat(self, binding: dict[str, Any]) -> dict[str, Any]:
-        tg_chat_id = binding.get("tg_chat_id")
-        if tg_chat_id is None:
+    async def _verify_forum(self, tg_forum_chat_id: int) -> tuple[bool, str | None]:
+        verify_forum = getattr(self.sender, "verify_forum", None)
+        if verify_forum is None:
+            return True, None
+        try:
+            result = await verify_forum(tg_forum_chat_id)
+        except Exception as exc:
+            return False, str(exc)
+
+        if isinstance(result, tuple):
+            ok = bool(result[0])
+            error_text = result[1] if len(result) > 1 else None
+            return ok, error_text
+        return bool(result), None if result else "Форум Telegram недоступен или у бота нет прав."
+
+    async def _ensure_topic(self, binding: dict[str, Any]) -> dict[str, Any]:
+        if binding.get("state") == STATE_MUTED:
             return binding
 
-        if not await self.sender.can_access_chat(tg_chat_id):
-            if not binding.get("pending_access_notified"):
-                queue_len = self.store.pending_count(binding["max_chat_id"])
-                await self.send_admin(
-                    "⏳ <b>Привязка сохранена, бот ещё не может писать в группу.</b>\n"
-                    f"MAX: {escape(binding.get('max_chat_title') or str(binding['max_chat_id']))}\n"
-                    f"Telegram: {escape(binding.get('tg_chat_title') or str(tg_chat_id))}\n"
-                    f"Очередь сообщений: {queue_len}"
-                )
-                binding = self.store.mark_pending_access_notified(binding["max_chat_id"])
+        forum = self.store.get_forum()
+        tg_forum_chat_id = forum.get("tg_forum_chat_id")
+        if tg_forum_chat_id is None:
             return binding
 
-        binding = self.store.mark_bound(binding["max_chat_id"])
-        flushed = await self._flush_binding_queue(binding)
-        if flushed:
-            await self.send_admin(
-                "✅ <b>Пересылка активирована</b>\n"
-                f"MAX: {escape(binding.get('max_chat_title') or str(binding['max_chat_id']))}\n"
-                f"Telegram: {escape(binding.get('tg_chat_title') or str(tg_chat_id))}\n"
-                f"Дозалито сообщений: {flushed}"
+        if not forum.get("is_available"):
+            ok, error_text = await self._verify_forum(int(tg_forum_chat_id))
+            if not ok:
+                self.store.mark_forum_available(False, error_text)
+                return self.store.mark_topic_pending(binding["max_chat_id"], error_text)
+            self.store.mark_forum_available(True)
+
+        topic_name = _topic_name(binding)
+        topic_id = binding.get("tg_topic_id")
+        if topic_id is not None:
+            if binding.get("tg_topic_name") != topic_name:
+                try:
+                    await self.sender.edit_forum_topic(int(tg_forum_chat_id), int(topic_id), topic_name)
+                except TelegramError as exc:
+                    if _is_target_unavailable(exc):
+                        return self.store.mark_topic_pending(
+                            binding["max_chat_id"],
+                            str(exc),
+                            clear_topic=_is_topic_unavailable_text(str(exc)),
+                        )
+                    raise
+                return self.store.set_topic(binding["max_chat_id"], int(tg_forum_chat_id), int(topic_id), topic_name)
+
+            if binding.get("state") != STATE_BOUND:
+                return self.store.mark_bound(binding["max_chat_id"])
+            return binding
+
+        try:
+            topic = await self.sender.create_forum_topic(int(tg_forum_chat_id), topic_name)
+        except TelegramError as exc:
+            if _is_target_unavailable(exc):
+                return self.store.mark_topic_pending(binding["max_chat_id"], str(exc))
+            raise
+
+        message_thread_id = _topic_message_thread_id(topic)
+        if message_thread_id is None:
+            return self.store.mark_topic_pending(
+                binding["max_chat_id"],
+                "Telegram не вернул ID созданного топика.",
             )
-        return binding
+
+        return self.store.set_topic(
+            binding["max_chat_id"],
+            int(tg_forum_chat_id),
+            int(message_thread_id),
+            topic_name,
+        )
 
     async def _deliver(self, binding: dict[str, Any], raw_payload: dict[str, Any]) -> None:
         if self._deliver_callback is None:
             raise RuntimeError("Delivery callback is not configured")
 
-        tg_chat_id = binding.get("tg_chat_id")
-        if tg_chat_id is None:
-            raise TelegramTargetUnavailableError("Telegram chat is not configured")
+        tg_forum_chat_id = binding.get("tg_forum_chat_id")
+        tg_topic_id = binding.get("tg_topic_id")
+        if tg_forum_chat_id is None or tg_topic_id is None:
+            raise TelegramTargetUnavailableError("Telegram topic is not configured")
 
         try:
-            await self._deliver_callback(int(tg_chat_id), raw_payload, binding)
+            await self._deliver_callback(int(tg_forum_chat_id), int(tg_topic_id), raw_payload, binding)
         except TelegramError as exc:
             if _is_target_unavailable(exc):
                 raise TelegramTargetUnavailableError(str(exc)) from exc
@@ -252,7 +347,15 @@ class ChatRouter:
                 continue
             try:
                 await self._deliver(binding, payload)
-            except TelegramTargetUnavailableError:
+            except TelegramTargetUnavailableError as exc:
+                clear_topic = _is_topic_unavailable_text(str(exc))
+                if not clear_topic:
+                    self.store.mark_forum_available(False, str(exc))
+                binding = self.store.mark_topic_pending(
+                    binding["max_chat_id"],
+                    str(exc),
+                    clear_topic=clear_topic,
+                )
                 break
             except Exception:
                 log.exception("Failed to flush queued message for MAX chat %s", binding["max_chat_id"])
@@ -265,6 +368,22 @@ class ChatRouter:
 
     async def _queue_pending_message(self, binding: dict[str, Any], raw_payload: dict[str, Any]) -> None:
         queue_len = self.store.enqueue_message(binding["max_chat_id"], raw_payload)
+        if not binding.get("pending_access_notified"):
+            forum = self.store.get_forum()
+            if forum.get("tg_forum_chat_id") is None:
+                await self.send_admin(
+                    "⏳ <b>Сообщение MAX поставлено в очередь.</b>\n"
+                    "Сначала выберите рабочий Telegram-форум, и бот создаст топики автоматически."
+                )
+            else:
+                await self.send_admin(
+                    "⏳ <b>Топик Telegram пока недоступен.</b>\n"
+                    f"MAX: {escape(binding.get('max_chat_title') or str(binding['max_chat_id']))}\n"
+                    f"Очередь сообщений: {queue_len}"
+                )
+            self.store.mark_pending_access_notified(binding["max_chat_id"])
+            return
+
         if queue_len >= self.QUEUE_WARNING_THRESHOLD and not binding.get("queue_warning_notified"):
             await self.send_admin(
                 "⚠️ <b>Растёт очередь недоставленных сообщений</b>\n"
@@ -274,10 +393,41 @@ class ChatRouter:
             self.store.mark_queue_warning_notified(binding["max_chat_id"])
 
 
+def _topic_name(binding: dict[str, Any]) -> str:
+    raw_name = str(binding.get("max_chat_title") or binding.get("max_chat_id") or "MAX")
+    name = " ".join(raw_name.split()) or "MAX"
+    if len(name) <= TOPIC_NAME_MAX_LENGTH:
+        return name
+    return name[:TOPIC_NAME_MAX_LENGTH]
+
+
+def _topic_message_thread_id(topic: Any) -> int | None:
+    value = getattr(topic, "message_thread_id", None)
+    if value is None and isinstance(topic, dict):
+        value = topic.get("message_thread_id")
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _is_target_unavailable(exc: TelegramError) -> bool:
     if isinstance(exc, Forbidden):
         return True
     if isinstance(exc, BadRequest):
         message = str(exc).lower()
-        return "chat not found" in message or "member" in message or "forbidden" in message
+        return (
+            "chat not found" in message
+            or "member" in message
+            or "forbidden" in message
+            or "not enough rights" in message
+            or "message thread not found" in message
+            or "topic" in message
+            or "forum" in message
+        )
     return False
+
+
+def _is_topic_unavailable_text(text: str) -> bool:
+    message = text.lower()
+    return "message thread not found" in message or "topic" in message
