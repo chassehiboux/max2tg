@@ -8,3 +8,4 @@ data/
 *.code*
 *.cl*
 .max2tg-runner.json
+logs/
