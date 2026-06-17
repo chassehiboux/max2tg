@@ -1,13 +1,10 @@
 """Tests for app/max_listener.py — pure helper functions."""
 
 import pytest
-from app.max_client import MaxMessage
 from app.max_listener import (
     _guess_media_kind,
     _header,
     _human_size,
-    _is_allowed_self_message,
-    _parse_chat_id_set,
     _with_header,
 )
 
@@ -171,32 +168,3 @@ class TestGuessMediaKind:
     # Extension appearing in the middle of filename should not trigger false match
     def test_mp4_in_name_not_extension_is_document(self):
         assert _guess_media_kind("mp4_notes.txt") == "document"
-
-
-# ---------------------------------------------------------------------------
-# Self-message test forwarding helpers
-# ---------------------------------------------------------------------------
-
-class TestForwardSelfChatIds:
-    def test_parse_chat_id_set_empty(self):
-        assert _parse_chat_id_set(None) == set()
-        assert _parse_chat_id_set("") == set()
-
-    def test_parse_chat_id_set_comma_separated(self):
-        assert _parse_chat_id_set("42, -100, 42") == {42, -100}
-
-    def test_parse_chat_id_set_rejects_invalid_id(self):
-        with pytest.raises(ValueError):
-            _parse_chat_id_set("42, favorites")
-
-    def test_allows_self_message_from_configured_chat(self):
-        msg = MaxMessage(chat_id="42", is_self=True)
-        assert _is_allowed_self_message(msg, {42}) is True
-
-    def test_rejects_self_message_from_other_chat(self):
-        msg = MaxMessage(chat_id=43, is_self=True)
-        assert _is_allowed_self_message(msg, {42}) is False
-
-    def test_rejects_non_self_message_even_when_chat_is_configured(self):
-        msg = MaxMessage(chat_id=42, is_self=False)
-        assert _is_allowed_self_message(msg, {42}) is False

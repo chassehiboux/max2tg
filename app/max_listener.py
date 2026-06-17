@@ -55,31 +55,6 @@ def _iter_resolved_chats(resolver: ContactResolver):
         yield chat_id, chat_title
 
 
-def _parse_chat_id_set(raw_value: str | None) -> set[int]:
-    if not raw_value:
-        return set()
-
-    chat_ids: set[int] = set()
-    for raw_item in raw_value.split(","):
-        item = raw_item.strip()
-        if not item:
-            continue
-        try:
-            chat_ids.add(int(item))
-        except ValueError as exc:
-            raise ValueError(f"Invalid MAX chat ID in MAX_FORWARD_SELF_CHAT_IDS: {item!r}") from exc
-    return chat_ids
-
-
-def _is_allowed_self_message(msg: MaxMessage, allowed_chat_ids: set[int]) -> bool:
-    if not msg.is_self:
-        return False
-    try:
-        return int(msg.chat_id) in allowed_chat_ids
-    except (TypeError, ValueError):
-        return False
-
-
 def _extract_photo_url(attach: dict) -> str | None:
     """Extract the best available URL for a PHOTO attachment."""
     return attach.get("baseUrl") or attach.get("url")
@@ -420,16 +395,14 @@ def _human_size(n: int) -> str:
 
 def create_max_client(
     max_token: str, max_device_id: str, sender: TelegramSender, router: ChatRouter, max_chat_ids: str | None = None,
-    max_exclude_chat_ids: str | None = None, max_forward_self_chat_ids: str | None = None, debug: bool = False,
+    max_exclude_chat_ids: str | None = None, debug: bool = False,
 ) -> MaxClient:
-    forward_self_chat_ids = _parse_chat_id_set(max_forward_self_chat_ids)
     client = MaxClient(
         token=max_token,
         device_id=max_device_id,
         debug=debug,
         chat_ids=max_chat_ids,
         exclude_chat_ids=max_exclude_chat_ids,
-        forward_self_chat_ids=forward_self_chat_ids,
     )
     resolver = ContactResolver(client=client)
 
@@ -445,8 +418,6 @@ def create_max_client(
     async def _deliver_payload(target_chat_id: int, target_thread_id: int, raw_payload: dict, binding: dict) -> None:
         msg = client._parse_message(raw_payload)
         if msg is None:
-            return
-        if msg.is_self and not _is_allowed_self_message(msg, forward_self_chat_ids):
             return
 
         sender_label = None
@@ -582,13 +553,6 @@ def create_max_client(
         else:
             chat_count = len(router.list_chats())
             await router.notify_connected(chat_count)
-            if forward_self_chat_ids:
-                ids_text = ", ".join(str(chat_id) for chat_id in sorted(forward_self_chat_ids))
-                await router.send_admin(
-                    "🧪 <b>Включена тестовая self-пересылка MAX.</b>\n"
-                    f"Self-сообщения будут пересылаться из чатов: <code>{escape(ids_text)}</code>\n"
-                    "Чтобы выключить режим, очистите <code>MAX_FORWARD_SELF_CHAT_IDS</code> в .env."
-                )
             await router.maybe_notify_unconfigured_summary()
         _first_connect = False
 
@@ -622,15 +586,13 @@ def create_max_client(
             len(msg.attaches),
         )
 
-        if msg.is_self and not _is_allowed_self_message(msg, forward_self_chat_ids):
-            return
-        if msg.is_self:
-            log.info("Forwarding allowed self message from MAX chat %s", msg.chat_id)
-
         chat_title = resolver.chat_name(msg.chat_id)
         if resolver.is_dm(msg.chat_id) and not _is_resolved_chat_title(chat_title):
-            resolved_title = await resolver.resolve_user(msg.sender_id)
-            if _is_resolved_chat_title(resolved_title):
+            if msg.is_self:
+                resolved_title = ""
+            else:
+                resolved_title = await resolver.resolve_user(msg.sender_id)
+            if not msg.is_self and _is_resolved_chat_title(resolved_title):
                 chat_title = resolved_title
             else:
                 binding = router.store.get_chat(msg.chat_id)

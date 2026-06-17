@@ -14,7 +14,6 @@ class Settings:
     tg_admin_id: int
     max_chat_ids: str | None = None
     max_exclude_chat_ids: str | None = None
-    max_forward_self_chat_ids: str | None = None
     tg_proxy: str | None = None
     debug: bool = False
 
@@ -71,7 +70,6 @@ def load_settings() -> Settings:
         tg_admin_id=parsed_admin_id,
         max_chat_ids=os.environ.get("MAX_CHAT_IDS") or None,
         max_exclude_chat_ids=os.environ.get("MAX_EXCLUDE_CHAT_IDS") or None,
-        max_forward_self_chat_ids=os.environ.get("MAX_FORWARD_SELF_CHAT_IDS") or None,
         tg_proxy=os.environ.get("TG_PROXY") or None,
         debug=os.environ.get("DEBUG", "").lower() in ("1", "true", "yes"),
     )

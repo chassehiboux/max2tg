@@ -74,14 +74,13 @@ cp .env.example .env
 | `MAX_DEVICE_ID` | да           | ID устройства Max                              |
 | `MAX_CHAT_IDS`  | нет          | список ID чатов Max, разделенных запятой       |
 | `MAX_EXCLUDE_CHAT_IDS` | нет    | список ID чатов Max, которые нужно исключить   |
-| `MAX_FORWARD_SELF_CHAT_IDS` | нет | тестовый режим: пересылать ваши собственные сообщения только из указанных чатов Max |
 | `TG_BOT_TOKEN`  | да           | Токен Telegram-бота                            |
 | `TG_ADMIN_ID`   | да           | Telegram user ID владельца бота                |
 | `DEBUG`         | нет          | `true` — подробные логи + дамп JSON в `debug/` |
 | `LOG_DIR`       | нет          | Путь к директории логов (по умолчанию `logs`)  |
 | `TG_PROXY`      | нет          | SOCKS5-прокси для Telegram (`socks5://host:port`) |
 
-Для тестирования пересылки через «Избранное» в Max укажите ID этого чата в `MAX_FORWARD_SELF_CHAT_IDS`, например `MAX_FORWARD_SELF_CHAT_IDS=123456789`. После перезапуска бот начнёт пересылать ваши собственные сообщения только из этого чата, а self-сообщения из остальных чатов продолжит игнорировать. ID чата можно взять из логов по строке `New message: chat=... is_self=True`.
+Бот пересылает ваши собственные сообщения из Max так же, как входящие сообщения других участников. Это удобно для восстановления почти полной истории и для тестирования через «Избранное». Сообщения, отправленные из Telegram обратно в Max через этого же бота, повторно в Telegram не пересылаются.
 
 После запуска бот пишет владельцу в личку и показывает кнопку `Настроить чаты`. В этом меню нужно один раз выбрать рабочий Telegram-форум. Дальше бот автоматически создаёт отдельный топик для каждого чата MAX и сохраняет состояние, топики, reply-связи и очередь недоставленных сообщений в `data/chat_bindings.json`.
 
@@ -354,14 +353,13 @@ cp .env.example .env
 | `MAX_DEVICE_ID` | yes | Max device ID |
 | `MAX_CHAT_IDS` | no | Comma-separated list of Max chat IDs to listen to (all chats if unset) |
 | `MAX_EXCLUDE_CHAT_IDS` | no | Comma-separated list of Max chat IDs to exclude |
-| `MAX_FORWARD_SELF_CHAT_IDS` | no | Test mode: forward your own Max messages only from these chat IDs |
 | `TG_BOT_TOKEN` | yes | Telegram bot token |
 | `TG_ADMIN_ID` | yes | Telegram user ID of the bot owner |
 | `DEBUG` | no | `true` — verbose logs + JSON dumps to `debug/` |
 | `LOG_DIR` | no | Log directory path (default: `logs`) |
 | `TG_PROXY` | no | SOCKS5 proxy for Telegram (`socks5://host:port`) |
 
-To test forwarding through Max Saved Messages, set that chat ID in `MAX_FORWARD_SELF_CHAT_IDS`, for example `MAX_FORWARD_SELF_CHAT_IDS=123456789`. After restart, the bot forwards your own messages only from that chat and keeps ignoring self-messages from other chats. You can find the chat ID in logs by the `New message: chat=... is_self=True` line.
+The bot forwards your own Max messages the same way it forwards messages from other participants. This is useful for rebuilding an almost complete history and for testing through Max Saved Messages. Messages sent from Telegram back to Max by this bot are not forwarded back to Telegram again.
 
 After startup, the bot writes to the owner's private chat and shows a `Configure chats` button. Use it once to choose the working Telegram forum. The bot then automatically creates one topic per Max chat and stores forum state, topics, reply links, and the backlog queue in `data/chat_bindings.json`.
 

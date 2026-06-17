@@ -91,6 +91,10 @@ class TestMaxMessageDefaults:
         msg = MaxMessage()
         assert msg.raw == {}
 
+    def test_default_cid_is_none(self):
+        msg = MaxMessage()
+        assert msg.cid is None
+
     def test_attaches_are_independent_instances(self):
         # mutable default via field(default_factory=...) must not be shared
         m1 = MaxMessage()
@@ -145,6 +149,12 @@ class TestParseMessage:
         msg = client._parse_message(payload)
         assert isinstance(msg.message_id, str)
         assert msg.message_id == "99999"
+
+    def test_cid_populated(self):
+        client = _make_client()
+        payload = {"chatId": 1, "message": {"id": "m1", "cid": 123456}}
+        msg = client._parse_message(payload)
+        assert msg.cid == 123456
 
     def test_missing_text_defaults_to_empty_string(self):
         client = _make_client()
@@ -295,11 +305,6 @@ class TestMaxClientInit:
         assert c1.chat_ids == [1, 2]
         assert c2.chat_ids == []
 
-    def test_forward_self_chat_ids_stored(self):
-        c = MaxClient(token="tok", device_id="dev", forward_self_chat_ids={3, 4})
-        assert set(c.forward_self_chat_ids) == {3, 4}
-
-
 class TestAuthSnapshot:
     @pytest.mark.asyncio
     async def test_handshake_requests_extended_chat_snapshot(self):
@@ -316,24 +321,27 @@ class TestAuthSnapshot:
 
 
 class TestDispatchFiltering:
-    def _dispatch_payload(self, chat_id, sender=99):
+    def _dispatch_payload(self, chat_id, sender=99, cid=None):
+        message = {
+            "id": "m1",
+            "sender": sender,
+            "text": "Hello",
+        }
+        if cid is not None:
+            message["cid"] = cid
         return {
             "opcode": OpCode.DISPATCH,
             "cmd": 0,
             "seq": 1,
             "payload": {
                 "chatId": chat_id,
-                "message": {
-                    "id": "m1",
-                    "sender": sender,
-                    "text": "Hello",
-                },
+                "message": message,
             },
         }
 
     @pytest.mark.asyncio
-    async def test_forward_self_chat_bypasses_regular_allowlist(self):
-        client = MaxClient(token="tok", device_id="dev", chat_ids="1", forward_self_chat_ids={2})
+    async def test_self_message_bypasses_regular_allowlist(self):
+        client = MaxClient(token="tok", device_id="dev", chat_ids="1")
         client._my_id = 99
         callback = AsyncMock()
         client.on_message(callback)
@@ -346,8 +354,8 @@ class TestDispatchFiltering:
         assert callback.await_args.args[0].is_self is True
 
     @pytest.mark.asyncio
-    async def test_non_self_forward_self_chat_does_not_bypass_regular_allowlist(self):
-        client = MaxClient(token="tok", device_id="dev", chat_ids="1", forward_self_chat_ids={2})
+    async def test_non_self_message_does_not_bypass_regular_allowlist(self):
+        client = MaxClient(token="tok", device_id="dev", chat_ids="1")
         client._my_id = 99
         callback = AsyncMock()
         client.on_message(callback)
@@ -358,13 +366,12 @@ class TestDispatchFiltering:
         callback.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_forward_self_chat_still_respects_exclude_list(self):
+    async def test_self_message_still_respects_exclude_list(self):
         client = MaxClient(
             token="tok",
             device_id="dev",
             chat_ids="1",
             exclude_chat_ids="2",
-            forward_self_chat_ids={2},
         )
         client._my_id = 99
         callback = AsyncMock()
@@ -374,6 +381,31 @@ class TestDispatchFiltering:
         await asyncio.sleep(0)
 
         callback.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_telegram_originated_self_echo_is_suppressed_by_cid(self):
+        client = MaxClient(token="tok", device_id="dev")
+        client._my_id = 99
+        client._remember_outgoing_cid(123456)
+        callback = AsyncMock()
+        client.on_message(callback)
+
+        await client._handle(self._dispatch_payload(2, sender=99, cid=123456))
+        await asyncio.sleep(0)
+
+        callback.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_manual_self_message_with_unknown_cid_is_forwarded(self):
+        client = MaxClient(token="tok", device_id="dev")
+        client._my_id = 99
+        callback = AsyncMock()
+        client.on_message(callback)
+
+        await client._handle(self._dispatch_payload(2, sender=99, cid=999))
+        await asyncio.sleep(0)
+
+        callback.assert_awaited_once()
 
 
 class TestMaskSensitive:
@@ -414,3 +446,14 @@ class TestSendMessage:
         assert payload["chatId"] == 42
         assert payload["message"]["text"] == "Hello"
         assert payload["message"]["link"] == {"type": "REPLY", "messageId": 123}
+
+    @pytest.mark.asyncio
+    async def test_remembers_cid_before_sending_to_suppress_echo(self):
+        client = MaxClient(token="tok", device_id="dev")
+        client.cmd = AsyncMock(return_value={"ok": True})
+
+        await client.send_message(42, "Hello", [])
+
+        payload = client.cmd.await_args.args[1]
+        cid = payload["message"]["cid"]
+        assert client._is_recent_outgoing_cid(cid) is True

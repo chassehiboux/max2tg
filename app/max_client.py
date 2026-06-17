@@ -77,6 +77,7 @@ class MaxMessage:
     text: str = ""
     timestamp: Any = None
     message_id: str = ""
+    cid: Any = None
     is_self: bool = False
     attaches: list = field(default_factory=list)
     link: dict = field(default_factory=dict)
@@ -89,6 +90,8 @@ class MaxClient:
     RECONNECT_SEC = 5
     AUTH_TIMEOUT_SEC = 10
     AUTH_CHATS_COUNT = 100
+    OUTGOING_ECHO_TTL_SEC = 300
+    OUTGOING_ECHO_LIMIT = 1000
 
     def __init__(
         self,
@@ -96,7 +99,6 @@ class MaxClient:
         device_id: str,
         chat_ids: str | None = None,
         exclude_chat_ids: str | None = None,
-        forward_self_chat_ids: list[int] | set[int] | None = None,
         debug: bool = False,
     ):
         self.token = token
@@ -119,7 +121,7 @@ class MaxClient:
             self.chat_ids.extend(map(int, map(str.strip, chat_ids.split(','))))
         if exclude_chat_ids:
             self.exclude_chat_ids.extend(map(int, map(str.strip, exclude_chat_ids.split(','))))
-        self.forward_self_chat_ids: list[int] = list(forward_self_chat_ids or [])
+        self._outgoing_cids: dict[str, float] = {}
 
     # ── decorator API ──────────────────────────────────────────────
 
@@ -372,6 +374,7 @@ class MaxClient:
         message_payload = {"text": text, "cid": cid, "elements": elements}
         if link:
             message_payload["link"] = link
+        self._remember_outgoing_cid(cid)
         resp = await self.cmd(
             OpCode.SEND_MESSAGE,
             {
@@ -420,10 +423,38 @@ class MaxClient:
         if self._chat_id_matches(msg.chat_id, self.exclude_chat_ids):
             return False
 
+        if msg.is_self and self._is_recent_outgoing_cid(msg.cid):
+            log.info("Skip Telegram-originated MAX echo: chat=%s cid=%s", msg.chat_id, msg.cid)
+            return False
+
         if not self.chat_ids or self._chat_id_matches(msg.chat_id, self.chat_ids):
             return True
 
-        return msg.is_self and self._chat_id_matches(msg.chat_id, self.forward_self_chat_ids)
+        return msg.is_self
+
+    def _remember_outgoing_cid(self, cid: Any) -> None:
+        if cid in (None, ""):
+            return
+        self._cleanup_outgoing_cids()
+        self._outgoing_cids[str(cid)] = time.monotonic()
+        if len(self._outgoing_cids) > self.OUTGOING_ECHO_LIMIT:
+            oldest = sorted(self._outgoing_cids.items(), key=lambda item: item[1])
+            for key, _ in oldest[: len(self._outgoing_cids) - self.OUTGOING_ECHO_LIMIT]:
+                self._outgoing_cids.pop(key, None)
+
+    def _is_recent_outgoing_cid(self, cid: Any) -> bool:
+        if cid in (None, ""):
+            return False
+        self._cleanup_outgoing_cids()
+        return str(cid) in self._outgoing_cids
+
+    def _cleanup_outgoing_cids(self) -> None:
+        if not self._outgoing_cids:
+            return
+        threshold = time.monotonic() - self.OUTGOING_ECHO_TTL_SEC
+        expired = [key for key, created_at in self._outgoing_cids.items() if created_at < threshold]
+        for key in expired:
+            self._outgoing_cids.pop(key, None)
 
     @staticmethod
     def _mask_sensitive(text: str) -> str:
@@ -450,6 +481,7 @@ class MaxClient:
             text=msg_body.get("text", ""),
             timestamp=msg_body.get("time"),
             message_id=str(msg_body.get("id", "")),
+            cid=msg_body.get("cid"),
             attaches=msg_body.get("attaches") or [],
             link=msg_body.get("link") or {},
             raw=payload,

@@ -38,7 +38,6 @@ class TestSettingsDataclass:
         assert settings.debug is False
         assert settings.max_chat_ids is None
         assert settings.max_exclude_chat_ids is None
-        assert settings.max_forward_self_chat_ids is None
 
     def test_frozen(self):
         settings = Settings(
@@ -76,10 +75,6 @@ class TestLoadSettingsValid:
     def test_optional_exclude_chat_ids(self):
         settings = _load_settings_with_env(_env(MAX_EXCLUDE_CHAT_IDS="-123,-456"))
         assert settings.max_exclude_chat_ids == "-123,-456"
-
-    def test_optional_forward_self_chat_ids(self):
-        settings = _load_settings_with_env(_env(MAX_FORWARD_SELF_CHAT_IDS="-123,-456"))
-        assert settings.max_forward_self_chat_ids == "-123,-456"
 
     def test_extracts_token_from_oneme_auth_json(self):
         settings = _load_settings_with_env(_env(MAX_TOKEN='{"token":"real-token","ttl":123}'))
