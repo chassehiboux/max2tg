@@ -128,7 +128,7 @@ docker-compose up -d --build
 git clone <repo-url> max2tg
 cd max2tg
 
-python .\launcher.py
+python .\START.py
 # или
 .\scripts\start_bot.ps1
 ```
@@ -405,7 +405,7 @@ docker-compose up -d --build
 git clone <repo-url> max2tg
 cd max2tg
 
-python .\launcher.py
+python .\START.py
 # or
 .\scripts\start_bot.ps1
 ```

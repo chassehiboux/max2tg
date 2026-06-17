@@ -8,12 +8,12 @@ $exitCode = 0
 try {
     $python = Get-Command python -ErrorAction SilentlyContinue
     if ($python) {
-        & $python.Source .\launcher.py 1
+        & $python.Source .\START.py 1
         $exitCode = $LASTEXITCODE
     } else {
         $py = Get-Command py -ErrorAction SilentlyContinue
         if ($py) {
-            & $py.Source -3 .\launcher.py 1
+            & $py.Source -3 .\START.py 1
             $exitCode = $LASTEXITCODE
         } else {
             throw "Python не найден в PATH. Установите Python 3.12+ и повторите запуск."

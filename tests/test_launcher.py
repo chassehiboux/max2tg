@@ -2,7 +2,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from launcher import (
+from START import (
     build_max_connectivity_hint,
     build_max_credentials_hint,
     build_telegram_connectivity_hint,
@@ -246,7 +246,7 @@ def test_monitor_startup_reports_max_error_when_auth_timeout_is_logged():
         )
         process = _FakeProcess(returncode=None, pid=777)
 
-        with patch("launcher.stop_process_by_pid") as stop_mock:
+        with patch("START.stop_process_by_pid") as stop_mock:
             status, code, _ = monitor_startup(process, log_path, 0)
 
     assert status == "max_error"
